@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 512 512"
+   version="1.1"
+   id="svg3"
+   sodipodi:docname="icon.svg"
+   xml:space="preserve"
+   inkscape:version="1.4.2 (f4327f4, 2025-05-13)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><defs
+     id="defs3"><clipPath
+       clipPathUnits="userSpaceOnUse"
+       id="clipPath37-5"><circle
+         style="fill:none;fill-opacity:1;stroke:#000000;stroke-width:0.255623;stroke-opacity:1"
+         id="circle37-9"
+         cx="119.77942"
+         cy="82.455788"
+         r="15.04769" /></clipPath><clipPath
+       clipPathUnits="userSpaceOnUse"
+       id="clipPath36-09"><circle
+         style="fill:none;fill-opacity:1;stroke:#000000;stroke-width:0.255623;stroke-opacity:1"
+         id="circle36-5"
+         cx="119.77942"
+         cy="82.455788"
+         r="15.04769" /></clipPath><clipPath
+       clipPathUnits="userSpaceOnUse"
+       id="clipPath33-2"><circle
+         style="fill:none;fill-opacity:1;stroke:#000000;stroke-width:0.255623;stroke-opacity:1"
+         id="circle33-4"
+         cx="119.77942"
+         cy="82.455788"
+         r="15.04769" /></clipPath><clipPath
+       clipPathUnits="userSpaceOnUse"
+       id="clipPath4"><path
+         id="path5"
+         style="fill:none;fill-opacity:0.588889;stroke:#ffffff;stroke-width:1.079;paint-order:stroke fill markers"
+         d="M 487.41095,257.32104 A 232.30426,232.30426 0 0 1 255.10669,489.62531 232.30426,232.30426 0 0 1 22.802429,257.32104 232.30426,232.30426 0 0 1 255.10669,25.016785 232.30426,232.30426 0 0 1 487.41095,257.32104 Z" /></clipPath><clipPath
+       clipPathUnits="userSpaceOnUse"
+       id="clipPath5"><path
+         id="path6"
+         style="fill:none;fill-opacity:0.588889;stroke:#ffffff;stroke-width:1.079;paint-order:stroke fill markers"
+         d="M 487.41095,257.32104 A 232.30426,232.30426 0 0 1 255.10669,489.62531 232.30426,232.30426 0 0 1 22.802429,257.32104 232.30426,232.30426 0 0 1 255.10669,25.016785 232.30426,232.30426 0 0 1 487.41095,257.32104 Z" /></clipPath></defs><sodipodi:namedview
+     id="namedview3"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="0.53378276"
+     inkscape:cx="406.53242"
+     inkscape:cy="371.87413"
+     inkscape:window-width="1920"
+     inkscape:window-height="991"
+     inkscape:window-x="-9"
+     inkscape:window-y="-9"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg3" /><!--
+    GliderLog app icon
+    Safe zone for maskable: central 80% (51px margin each side → 51..461)
+    Background fills the full tile so maskable cropping looks correct.
+  --><!-- Full background (fills entire tile for maskable) --><!-- Orange stripe — sits inside the safe zone bottom --><!-- "GL" logotype — centred, inside safe zone --><!--
+    Subtle glider silhouette above the text — top-down view
+    Keeps the icon recognisable at a glance
+  --><!-- fuselage --><!-- main wings --><!-- tail fin horizontal --><path
+     id="path3"
+     style="fill:none;fill-opacity:0.588889;stroke:#ffffff;stroke-width:1.079;paint-order:stroke fill markers"
+     d="M 487.41095,257.32104 A 232.30426,232.30426 0 0 1 255.10669,489.62531 232.30426,232.30426 0 0 1 22.802429,257.32104 232.30426,232.30426 0 0 1 255.10669,25.016785 232.30426,232.30426 0 0 1 487.41095,257.32104 Z" /><path
+     d="m 168.91049,19.298128 c 13.20149,1.55308 26.59556,193.797852 0,215.561262 -14.31443,11.71367 -266.495468,18.43397 -358.75842,20.50915 -13.98788,0.31462 -24.30011,0.52282 -29.5503,0.62516 2.0182,-0.005 4.78524,-0.005 8.22538,0.006 23.72194,-0.12569 81.40756,-0.43935 149.96315,-0.90597 129.31613,-0.88021 297.30432,-2.30013 348.95068,-3.99694 76.81525,-2.52371 100.34264,-39.07576 98.61444,-130.7248 -1.7282,-91.649063 1.73198,-97.034146 1.73198,-97.034146 L 287.74712,21.99361 c 8.13075,113.22165 29.75358,190.4161 -15.10002,208.47551 -3.62553,1.45974 -8.35646,2.82963 -14.0588,4.11781 25.6044,-13.71469 25.52461,-24.9212 27.18907,-52.83063 2.37158,-39.76766 -16.12051,-162.357542 -16.52251,-162.458025 z"
+     style="fill:#ffffff;stroke-width:0.277664"
+     id="path1"
+     clip-path="url(#clipPath5)" /><path
+     d="m 168.91049,492.70187 c 13.20149,-1.55308 26.59556,-193.79785 0,-215.56126 -14.31443,-11.71367 -266.495477,-18.43397 -358.75842,-20.50915 -13.98788,-0.31462 -24.30011,-0.52283 -29.5503,-0.62516 2.0182,0.005 4.78524,0.005 8.22538,-0.006 23.72194,0.12569 81.40756,0.43935 149.96315,0.90597 129.316129,0.88014 297.30432,2.30007 348.95068,3.99687 76.81525,2.52372 100.34264,39.07576 98.61444,130.72482 -1.7282,91.64912 1.73198,97.0342 1.73198,97.0342 l -100.34028,1.34459 c 8.13075,-113.22164 29.75358,-190.4161 -15.10002,-208.47551 -3.62553,-1.45974 -8.35646,-2.82963 -14.0588,-4.11781 25.6044,13.71469 25.52461,24.9212 27.18907,52.83064 2.37158,39.76766 -16.12051,162.35754 -16.52251,162.45802 z"
+     style="fill:#ffffff;stroke-width:0.277664"
+     id="path2"
+     clip-path="url(#clipPath4)" /></svg>
