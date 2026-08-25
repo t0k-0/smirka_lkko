@@ -1,7 +1,10 @@
+
+
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Aircraft, AppState, ComposerMode, ComposerSlot, LogEntry, RecentConfig } from '../types';
 import { airbornePilots, airborneRegistrations, composerPilots, isComposerReady, sortLog } from '../domain';
 import { localTime } from '../time';
+import { translate } from '../i18n';
 
 const roleLabel = { tow: 'TOW', glider: 'GLI', motorized: 'MOT' } as const;
 
@@ -15,17 +18,17 @@ export function AirbornePanel({
   return (
     <div class="panel" id="top-panel">
       <div class="panel-label">
-        AIRBORNE <span class="cnt">{state.airborne.length || ''}</span>
+        {translate(state.language, 'airborne')} <span class="cnt">{state.airborne.length || ''}</span>
       </div>
       <div id="airborne-scroll">
-        {!state.airborne.length && <div class="no-abn">NO FLIGHTS AIRBORNE</div>}
+        {!state.airborne.length && <div class="no-abn">{translate(state.language, 'noFlightsAirborne')}</div>}
         {state.airborne.map((flight) =>
           flight.type === 'aerotow' ? (
             <div
               class={`abn-entry aerotow${state.landId === flight.id ? ' land-sel' : ''}`}
               key={flight.id}
             >
-              <div class="abn-badge">AEROTOW · #{flight.num}</div>
+              <div class="abn-badge">{translate(state.language, 'aerotow')} · #{flight.num}</div>
               <AirborneRow
                 role="tow"
                 reg={flight.tow.plane.reg}
@@ -150,13 +153,13 @@ export function ComposerPanel({
             class={`mode-tab${state.mode === 'aerotow' ? ' active' : ''}`}
             onClick={() => onMode('aerotow')}
           >
-            AEROTOW
+            {translate(state.language, 'aerotow')}
           </button>
           <button
             class={`mode-tab${state.mode === 'single' ? ' active' : ''}`}
             onClick={() => onMode('single')}
           >
-            SINGLE
+            {translate(state.language, 'single')}
           </button>
         </div>
         <span class="swipe-hint R">→</span>
@@ -166,6 +169,7 @@ export function ComposerPanel({
           <>
             <FlightSlot
               slot="tow"
+              language={state.language}
               plane={state.comp.tow.plane}
               pilots={[state.comp.tow.pilot]}
               focused={state.focus?.slot === 'tow'}
@@ -175,6 +179,7 @@ export function ComposerPanel({
             />
             <FlightSlot
               slot="glider"
+              language={state.language}
               plane={state.comp.glider.plane}
               pilots={state.comp.glider.pilots}
               focused={state.focus?.slot === 'glider'}
@@ -186,6 +191,7 @@ export function ComposerPanel({
         ) : (
           <FlightSlot
             slot="single"
+            language={state.language}
             plane={state.comp.single.plane}
             pilots={state.comp.single.pilots}
             focused={state.focus?.slot === 'single'}
@@ -201,6 +207,7 @@ export function ComposerPanel({
 
 export function FlightSlot({
   slot,
+  language,
   plane,
   pilots,
   focused,
@@ -209,6 +216,7 @@ export function FlightSlot({
   onDropPilot
 }: {
   slot: ComposerSlot;
+  language: 'en' | 'cs';
   plane: Aircraft | null;
   pilots: readonly (string | null)[];
   focused: boolean;
@@ -224,10 +232,10 @@ export function FlightSlot({
   if (!plane) {
     const label =
       slot === 'tow'
-        ? 'TAP - SELECT TOWPLANE'
+        ? translate(language, 'selectTowplane')
         : slot === 'glider'
-          ? 'TAP - SELECT GLIDER'
-          : 'TAP - SELECT AIRCRAFT';
+          ? translate(language, 'selectGlider')
+          : translate(language, 'selectAircraft');
     return (
       <button
         class={`slot-card slot-empty ${role}-type${focused ? ' focused' : ''}`}
@@ -236,7 +244,7 @@ export function FlightSlot({
         <span class={`slot-top-bar ${role}`} />
         <span class="slot-empty-label">{label}</span>
         {slot === 'single' && (
-          <span class="slot-empty-sub">TOWPLANE OR MOTORIZED GLIDER</span>
+          <span class="slot-empty-sub">{translate(language, 'towplaneOrMotorized')}</span>
         )}
       </button>
     );
@@ -283,7 +291,7 @@ export function FlightSlot({
                   data-drop-slot={slot}
                   data-drop-sub={sub}
                 >
-                  {pilots[index] || `PILOT ${slot === 'tow' ? '' : index + 1}`}
+                  {pilots[index] || `${translate(language, 'pilot')}${slot === 'tow' ? '' : ` ${index + 1}`}`}
                 </button>
               );
             }
@@ -342,10 +350,11 @@ export function BottomPanel({
     );
     return (
       <SelectionPanel
-        label="SELECT AIRCRAFT"
+        label={translate(state.language, 'selectAircraftTitle')}
         search={search}
         onSearch={setSearch}
-        empty="NO MATCHING PLANES IN PRESET"
+        empty={translate(state.language, 'noMatchingPlanes')}
+        language={state.language}
       >
         <div class="sel-grid">
           {planes.map((plane) => (
@@ -357,12 +366,12 @@ export function BottomPanel({
               <span class={`pc-reg ${plane.fn}`}>{plane.reg}</span>
               <span class="pc-type">{plane.type}</span>
               <span class="pc-seats">
-                {plane.seats} SEAT{plane.seats > 1 ? 'S' : ''}{' '}
+                {plane.seats} {plane.seats > 1 ? 'SEATS' : 'SEAT'}{' '}
                 {plane.takeoffTypes.length ? `· ${plane.takeoffTypes.join('')}` : ''}
               </span>
             </button>
           ))}
-          {!planes.length && <div class="no-items">NO MATCHING PLANES IN PRESET</div>}
+          {!planes.length && <div class="no-items">{translate(state.language, 'noMatchingPlanes')}</div>}
         </div>
       </SelectionPanel>
     );
@@ -375,20 +384,26 @@ export function BottomPanel({
         state.dayPilots.includes(pilot) &&
         (!search || pilot.toLowerCase().includes(search.toLowerCase()))
     );
+    const orderedPilots = [...pilots].sort((first, second) => {
+      const firstBlocked = blockedAirborne.has(first) || blockedComposer.has(first);
+      const secondBlocked = blockedAirborne.has(second) || blockedComposer.has(second);
+      return Number(firstBlocked) - Number(secondBlocked);
+    });
     return (
       <SelectionPanel
-        label={`SELECT ${state.focus.sub === 'p1' ? 'PILOT 2' : 'PILOT 1'}`}
+        label={`${translate(state.language, 'selectPilot')}${state.focus.sub === 'p1' ? '2' : '1'}`}
         search={search}
         onSearch={setSearch}
-        empty="NO MATCHING PILOTS IN PRESET"
+        empty={translate(state.language, 'noMatchingPilots')}
+        language={state.language}
       >
-        <div class="drag-hint-bar">DRAG ↑ TO SLOT · TAP TO ASSIGN</div>
+        <div class="drag-hint-bar">{translate(state.language, 'dragToSlot')}</div>
         <div class="pilots-grid">
-          {pilots.map((pilot) => {
+          {orderedPilots.map((pilot) => {
             const reason = blockedAirborne.has(pilot)
-              ? 'AIRBORNE'
+                ? translate(state.language, 'airborne')
               : blockedComposer.has(pilot)
-                ? 'IN USE'
+                ? translate(state.language, 'inUse')
                 : '';
             return (
               <button
@@ -417,7 +432,7 @@ export function BottomPanel({
               </button>
             );
           })}
-          {!pilots.length && <div class="no-items">NO MATCHING PILOTS IN PRESET</div>}
+          {!pilots.length && <div class="no-items">{translate(state.language, 'noMatchingPilots')}</div>}
         </div>
         {state.focus.sub === 'p1' && (
           <button
@@ -428,7 +443,7 @@ export function BottomPanel({
               else notify('PILOT 1 IS REQUIRED');
             }}
           >
-            SOLO - NO SECOND PILOT
+            {translate(state.language, 'soloNoSecond')}
           </button>
         )}
       </SelectionPanel>
@@ -438,16 +453,16 @@ export function BottomPanel({
     return (
       <div class="action-row">
         <button class="btn-side" onClick={() => onClear()}>
-          CLEAR
+          {translate(state.language, 'clear')}
         </button>
         <button class="btn-log takeoff" onClick={() => onTakeoff()}>
           <LiveClock />
-          <span class="sub">LOG TAKEOFF</span>
+          <span class="sub">{translate(state.language, 'logTakeoff')}</span>
         </button>
         <button class="btn-side" onClick={() => onTime('takeoff')}>
-          SET
+          {translate(state.language, 'set')}
           <br />
-          TIME
+          {translate(state.language, 'time')}
         </button>
       </div>
     );
@@ -464,22 +479,22 @@ export function BottomPanel({
     return (
       <div class="landing-panel">
         <div class="land-ctx">
-          <span>▼ LANDING</span>
+            <span>▼ {translate(state.language, 'landing')}</span>
           <strong>{reg}</strong>
-          <span>T/O {flight.toTime}</span>
+          <span>{translate(state.language, 'takeoffShort')} {flight.toTime}</span>
         </div>
         <div class="action-row">
           <button class="btn-side" onClick={() => onCancelLanding()}>
-            CANCEL
+            {translate(state.language, 'cancelAction')}
           </button>
           <button class="btn-log land" onClick={() => onLanding()}>
             <LiveClock />
-            <span class="sub">LOG LANDING</span>
+            <span class="sub">{translate(state.language, 'logLanding')}</span>
           </button>
           <button class="btn-side" onClick={() => onTime('landing')}>
-            SET
+            {translate(state.language, 'set')}
             <br />
-            TIME
+            {translate(state.language, 'time')}
           </button>
         </div>
       </div>
@@ -489,9 +504,9 @@ export function BottomPanel({
     return (
       <div class="recent-panel">
         <div class="bottom-lbl">
-          <span>RECENT CONFIGS</span>
+          <span>{translate(state.language, 'recentConfigs')}</span>
           <button class="bottom-lbl-r" onClick={() => onPatch({ bottomMode: 'idle' })}>
-            ← BACK
+            {translate(state.language, 'back')}
           </button>
         </div>
         <div class="recents-list">
@@ -517,7 +532,7 @@ export function BottomPanel({
             </button>
           ))}
           {!state.recentConfigs.length && (
-            <div class="rc-empty">NO RECENT CONFIGURATIONS</div>
+            <div class="rc-empty">{translate(state.language, 'noRecent')}</div>
           )}
         </div>
       </div>
@@ -525,15 +540,15 @@ export function BottomPanel({
   }
   return (
     <div class="bottom-idle">
-      <div class="idle-hint">TAP A SLOT ABOVE TO BEGIN</div>
+      <div class="idle-hint">{translate(state.language, 'tapSlot')}</div>
       <div class="idle-swipe-hint">
         {state.recentConfigs.length
-          ? 'SWIPE FOR RECENT CONFIGS'
-          : 'LOG A FLIGHT TO BUILD HISTORY'}
+          ? translate(state.language, 'swipeRecents')
+          : translate(state.language, 'buildHistory')}
       </div>
       {state.recentConfigs.length > 0 && (
         <button class="hdr-btn recents-btn" onClick={() => onPatch({ bottomMode: 'recents' })}>
-          RECENTS →
+          {translate(state.language, 'recentConfigs')} →
         </button>
       )}
     </div>
@@ -544,11 +559,13 @@ export function SelectionPanel({
   label,
   search,
   onSearch,
+  language,
   children
 }: {
   label: string;
   search: string;
   onSearch: (value: string) => void;
+  language: 'en' | 'cs';
   empty: string;
   children: preact.ComponentChildren;
 }) {
@@ -558,7 +575,7 @@ export function SelectionPanel({
       <div class="selection-search">
         <input
           aria-label="Search"
-          placeholder="Search..."
+          placeholder={translate(language, 'search')}
           value={search}
           onInput={(event) => onSearch(event.currentTarget.value)}
         />

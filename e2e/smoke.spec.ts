@@ -6,7 +6,7 @@ test('renders the authentication gate without missing icon requests', async ({ p
     if (response.status() === 404) missing.push(response.url());
   });
   await page.goto('/');
-  await expect(page.getByText('ŠMÍRKA MOBILE')).toBeVisible();
+  await expect(page.locator('#login-overlay')).toBeVisible();
   await expect(page.getByRole('button', { name: 'LOGIN' })).toBeVisible();
   await expect(page.locator('.login-logo-img')).toHaveAttribute(
     'src',
@@ -59,6 +59,15 @@ test('logs an aerotow through landing and restores the daily log', async ({ page
 
   await page.goto('/');
   await login();
+
+  await page.locator('#hdr .hdr-btn').click();
+  await page.getByRole('button', { name: 'MANAGE PLANES' }).click();
+  await page.getByRole('button', { name: 'ADD ALL' }).click();
+  await page.getByRole('button', { name: 'DONE' }).click();
+  await page.getByRole('button', { name: 'MANAGE PILOTS' }).click();
+  await page.getByRole('button', { name: 'ADD ALL' }).click();
+  await page.getByRole('button', { name: 'DONE' }).click();
+  await page.getByRole('button', { name: 'DONE' }).click();
 
   await page.getByRole('button', { name: /SELECT TOWPLANE/ }).click();
   await page.getByRole('button', { name: /OK-TOW/ }).click();

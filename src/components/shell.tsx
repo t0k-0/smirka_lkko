@@ -16,6 +16,35 @@ interface Toast {
   message: string;
 }
 
+function LanguageSwitch({
+  language,
+  onChange
+}: {
+  language: 'en' | 'cs';
+  onChange: (language: 'en' | 'cs') => void;
+}) {
+  return (
+    <div class="language-switch" role="group" aria-label="Language">
+      <button
+        type="button"
+        class={language === 'en' ? 'active' : ''}
+        aria-pressed={language === 'en'}
+        onClick={() => onChange('en')}
+      >
+        EN
+      </button>
+      <button
+        type="button"
+        class={language === 'cs' ? 'active' : ''}
+        aria-pressed={language === 'cs'}
+        onClick={() => onChange('cs')}
+      >
+        CZ
+      </button>
+    </div>
+  );
+}
+
 export function Login({
   state,
   client,
@@ -62,7 +91,14 @@ export function Login({
     <div id="login-overlay">
       <form class="login-box" onSubmit={submit}>
         <div class="login-hdr">
-          <span class="login-title">ŠMÍRKA MOBILE</span>
+          <button
+            type="button"
+            class="theme-switch"
+            onClick={onTheme}
+            aria-label={state.theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {state.theme === 'dark' ? 'LIGHT' : 'DARK'}
+          </button>
           <select
             class="language-select"
             aria-label={translate(state.language, 'language')}
@@ -75,7 +111,7 @@ export function Login({
         </div>
         <div class="login-body">
           <div class="login-logo-wrap">
-            <button type="button" class="login-logo" onClick={onTheme} title="Toggle theme">
+            <div class="login-logo">
               <img
                 src={`${import.meta.env.BASE_URL}icon_${
                   state.theme === 'dark' ? 'darkmode' : 'lightmode'
@@ -83,61 +119,54 @@ export function Login({
                 alt="Šmírka logo"
                 class="login-logo-img"
               />
-            </button>
-          </div>
-          <div class="login-section">
-            <div class="login-sec-hdr">{translate(state.language, 'connection')}</div>
-            <div class="form-row">
-              <span class="form-lbl">{translate(state.language, 'mode')}</span>
-              <div class="form-seg">
-                <button
-                  type="button"
-                  class={`seg${!useTest ? ' on' : ''}`}
-                  onClick={() => setUseTest(false)}
-                >
-                  {translate(state.language, 'production')}
-                </button>
-                <button
-                  type="button"
-                  class={`seg${useTest ? ' on' : ''}`}
-                  onClick={() => setUseTest(true)}
-                >
-                  {translate(state.language, 'test')}
-                </button>
-              </div>
             </div>
-            <label class="form-row">
-              <span class="form-lbl">{translate(state.language, 'proxy')}</span>
-              <input
-                class="form-in"
-                value={proxy}
-                onInput={(event) => setProxy(event.currentTarget.value)}
-                autoCapitalize="none"
-                spellcheck={false}
-              />
-            </label>
           </div>
-          <div class="login-section">
-            <div class="login-sec-hdr">{translate(state.language, 'credentials')}</div>
-            <label class="form-row">
-              <span class="form-lbl">{translate(state.language, 'user')}</span>
-              <input
-                class="form-in"
-                value={username}
-                onInput={(event) => setUsername(event.currentTarget.value)}
-                autoComplete="username"
-              />
-            </label>
-            <label class="form-row">
-              <span class="form-lbl">{translate(state.language, 'pass')}</span>
-              <input
-                class="form-in"
-                type="password"
-                value={password}
-                onInput={(event) => setPassword(event.currentTarget.value)}
-                autoComplete="current-password"
-              />
-            </label>
+          <div class="login-mode">
+            <span class="login-field-hint">{translate(state.language, 'mode')}</span>
+            <div class="form-seg">
+              <button
+                type="button"
+                class={`seg prod${!useTest ? ' on' : ''}`}
+                onClick={() => setUseTest(false)}
+              >
+                {translate(state.language, 'production')}
+              </button>
+              <button
+                type="button"
+                class={`seg test${useTest ? ' on' : ''}`}
+                onClick={() => setUseTest(true)}
+              >
+                {translate(state.language, 'test')}
+              </button>
+            </div>
+          </div>
+          <div class="login-fields">
+            <input
+              class="form-in"
+              value={proxy}
+              onInput={(event) => setProxy(event.currentTarget.value)}
+              aria-label={translate(state.language, 'proxy')}
+              placeholder={translate(state.language, 'proxy')}
+              autoCapitalize="none"
+              spellcheck={false}
+            />
+            <input
+              class="form-in"
+              value={username}
+              onInput={(event) => setUsername(event.currentTarget.value)}
+              aria-label={translate(state.language, 'user')}
+              placeholder={translate(state.language, 'user')}
+              autoComplete="username"
+            />
+            <input
+              class="form-in"
+              type="password"
+              value={password}
+              onInput={(event) => setPassword(event.currentTarget.value)}
+              aria-label={translate(state.language, 'pass')}
+              placeholder={translate(state.language, 'pass')}
+              autoComplete="current-password"
+            />
           </div>
           <div class="login-status">{status}</div>
           <button class="login-btn" disabled={busy}>
@@ -172,26 +201,25 @@ export function Header({
         <span class="log-arr">▼</span>
       </button>
       <span class="date-str">
-        Date: {pad2(now.getDate())} {pad2(now.getMonth() + 1)} {now.getFullYear()}
+        {translate(state.language, 'date')}: {pad2(now.getDate())} {pad2(now.getMonth() + 1)} {now.getFullYear()}
       </span>
       <div class="hdr-btns">
-        {(syncStatus.queueLength > 0 || syncStatus.syncing) && (
-          <span id="sync-badge">
-            {syncStatus.syncing ? 'SYNC...' : `${syncStatus.queueLength} PENDING`}
-          </span>
-        )}
-        <span id="sync-indicator" title={online ? 'CONNECTED' : 'OFFLINE'}>
-          <span class="status-icon">{online ? '●' : '○'}</span>
+        <span
+          id="sync-indicator"
+          title={online ? 'CONNECTED' : 'OFFLINE'}
+          aria-label={online ? 'Connected' : 'Offline'}
+        >
+          <span class="sync-status-symbol" aria-hidden="true">{online ? '↕' : '×'}</span>
         </span>
         <span
           id="local-save-indicator"
           class="status-icon saved"
           title={state.language === 'cs' ? 'ZÁZNAM ULOŽEN LOKÁLNĚ' : 'LOG SAVED LOCALLY'}
-        >
-          💾
-        </span>
+          aria-label={state.language === 'cs' ? 'Záznam uložen lokálně' : 'Log saved locally'}
+        ></span>
         <button class="hdr-btn" onClick={onSettings}>
-          ⚙ SETTINGS
+          <span class="hdr-btn-icon" aria-hidden="true">⚙</span>
+          <span class="hdr-btn-label">SETTINGS</span>
         </button>
       </div>
     </div>

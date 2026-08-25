@@ -405,12 +405,10 @@ export function App({ services }: { services: Services }) {
       update((current) => ({
         ...current,
         ...normalized,
-        dayPlanes: current.presetInitialized
-          ? current.dayPlanes.filter((reg) => normalized.planes.some((plane) => plane.reg === reg))
-          : normalized.planes.map((plane) => plane.reg),
-        dayPilots: current.presetInitialized
-          ? current.dayPilots.filter((pilot) => normalized.pilots.includes(pilot))
-          : normalized.pilots,
+        dayPlanes: current.dayPlanes.filter((reg) =>
+          normalized.planes.some((plane) => plane.reg === reg)
+        ),
+        dayPilots: current.dayPilots.filter((pilot) => normalized.pilots.includes(pilot)),
         presetInitialized: true
       }));
       notify(`SYNCED ${normalized.planes.length} PLANES, ${normalized.pilots.length} PILOTS`, 2200);
@@ -451,8 +449,22 @@ export function App({ services }: { services: Services }) {
     const index = field === 'pilot1' ? 1 : 0;
     const current =
       field === 'note' ? entry.note : entry.pilots[index] || '';
+    if (field !== 'note') {
+      openPilotPicker(current, state.dayPilots, (value) => {
+        update((app) => ({
+          ...app,
+          log: app.log.map((item) => {
+            if (item.id !== id) return item;
+            const pilots = [...item.pilots];
+            pilots[index] = value;
+            return { ...item, pilots };
+          })
+        }));
+      });
+      return;
+    }
     const value = window.prompt(
-      field === 'note' ? `Note for ${entry.reg}:` : `Edit pilot - ${entry.reg}:`,
+      `Note for ${entry.reg}:`,
       current
     );
     if (value === null) return;
@@ -468,11 +480,56 @@ export function App({ services }: { services: Services }) {
     }));
   };
 
+  const openPilotPicker = (
+    current: string,
+    pilots: string[],
+    confirm: (value: string) => void
+  ) => {
+    const options = [...new Set([current, ...pilots].filter(Boolean))];
+    if (!options.length) return;
+    const select = document.createElement('select');
+    select.value = current;
+    select.setAttribute('aria-label', 'Select pilot');
+    options.forEach((pilot) => {
+      const option = document.createElement('option');
+      option.value = pilot;
+      option.textContent = pilot;
+      select.appendChild(option);
+    });
+    select.style.position = 'fixed';
+    select.style.opacity = '0';
+    select.style.pointerEvents = 'none';
+    document.body.appendChild(select);
+    const cleanup = () => {
+      select.removeEventListener('change', changed);
+      select.removeEventListener('cancel', cleanup);
+      select.remove();
+    };
+    const changed = () => {
+      if (select.value) confirm(select.value);
+      cleanup();
+    };
+    select.addEventListener('change', changed, { once: true });
+    select.addEventListener('cancel', cleanup, { once: true });
+    try {
+      if (typeof select.showPicker === 'function') {
+        select.showPicker();
+      } else {
+        cleanup();
+        const fallback = window.prompt(`Select pilot:\n${options.join('\n')}`, current);
+        if (fallback !== null && options.includes(fallback.trim())) confirm(fallback.trim());
+      }
+    } catch {
+      cleanup();
+      const fallback = window.prompt(`Select pilot:\n${options.join('\n')}`, current);
+      if (fallback !== null && options.includes(fallback.trim())) confirm(fallback.trim());
+    }
+  };
+
   const editTime = (entry: LogEntry, field: 'toTime' | 'ldgTime') => {
-    setTimeDialog({
-      title: field === 'toTime' ? 'EDIT TAKEOFF TIME' : 'EDIT LANDING TIME',
-      value: entry[field] || localTime(),
-      confirm: (value) => {
+    openTimePicker(
+      entry[field] || localTime(),
+      (value) => {
         update((current) => {
           const log = current.log.map((item) => {
             const same = item.id === entry.id || (field === 'toTime' && entry.pair && item.pair === entry.pair);
@@ -488,8 +545,46 @@ export function App({ services }: { services: Services }) {
           });
           return { ...current, log };
         });
+      },
+      field === 'toTime' ? 'EDIT TAKEOFF TIME' : 'EDIT LANDING TIME'
+    );
+  };
+
+  const openTimePicker = (
+    value: string,
+    confirm: (value: string) => void,
+    title: string
+  ) => {
+    const input = document.createElement('input');
+    input.type = 'time';
+    input.value = value;
+    input.setAttribute('aria-label', title);
+    input.style.position = 'fixed';
+    input.style.opacity = '0';
+    input.style.pointerEvents = 'none';
+    document.body.appendChild(input);
+    const cleanup = () => {
+      input.removeEventListener('change', changed);
+      input.removeEventListener('cancel', cleanup);
+      input.remove();
+    };
+    const changed = () => {
+      if (input.value) confirm(input.value);
+      cleanup();
+    };
+    input.addEventListener('change', changed, { once: true });
+    input.addEventListener('cancel', cleanup, { once: true });
+    try {
+      if (typeof input.showPicker === 'function') {
+        input.showPicker();
+      } else {
+        setTimeDialog({ title, value, confirm });
+        cleanup();
       }
-    });
+    } catch {
+      setTimeDialog({ title, value, confirm });
+      cleanup();
+    }
   };
 
   const preparePush = async () => {
@@ -607,11 +702,11 @@ export function App({ services }: { services: Services }) {
               }
               onClear={() => resetComposer()}
               onTime={(kind) =>
-                setTimeDialog({
-                  title: kind === 'takeoff' ? 'SET TAKEOFF TIME' : 'SET LANDING TIME',
-                  value: localTime(),
-                  confirm: kind === 'takeoff' ? takeoff : landing
-                })
+                openTimePicker(
+                  localTime(),
+                  kind === 'takeoff' ? takeoff : landing,
+                  kind === 'takeoff' ? 'SET TAKEOFF TIME' : 'SET LANDING TIME'
+                )
               }
               onRecent={loadRecent}
               notify={notify}
@@ -641,14 +736,9 @@ export function App({ services }: { services: Services }) {
       {overlay === 'settings' && (
         <Settings
           state={state}
-          autoSync={autoSync}
           client={services.client}
           onClose={() => setOverlay('none')}
           onPatch={patch}
-          onAutoSync={(value) => {
-            setAutoSync(value);
-            if (value) void services.sync.drain();
-          }}
           onSync={() => void syncReferenceData()}
           onManager={(kind) => setOverlay(kind)}
           onLogout={() => void services.client.logout()}

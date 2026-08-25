@@ -40,6 +40,13 @@ export function localToUTC(value: string, date = new Date()): string {
   return `${pad2(Math.floor(total / 60))}:${pad2(total % 60)}`;
 }
 
+export function utcOffsetLabel(date = new Date()): string {
+  const offset = -date.getTimezoneOffset();
+  const sign = offset >= 0 ? '+' : '-';
+  const absolute = Math.abs(offset);
+  return `UTC${sign}${pad2(Math.floor(absolute / 60))}:${pad2(absolute % 60)}`;
+}
+
 export function intervalsOverlap(
   firstStart: string,
   firstDuration: number,

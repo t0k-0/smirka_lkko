@@ -1,8 +1,28 @@
-import { useState } from 'preact/hooks';
+import { useRef, useState } from 'preact/hooks';
 import type { AppState, LogEntry, PushAnalysis } from '../types';
 import type { KlubkoClient } from '../klubko';
-import { localToUTC, pad2, timeToMinutes } from '../time';
 import { filteredLog } from './flight';
+import { translate } from '../i18n';
+import { localToUTC, pad2, timeToMinutes, utcOffsetLabel } from '../time';
+
+function LanguageSwitch({
+  language,
+  onChange
+}: {
+  language: 'en' | 'cs';
+  onChange: (language: 'en' | 'cs') => void;
+}) {
+  return (
+    <div class="language-switch" role="group" aria-label="Language">
+      <button type="button" class={language === 'en' ? 'active' : ''} aria-pressed={language === 'en'} onClick={() => onChange('en')}>
+        EN
+      </button>
+      <button type="button" class={language === 'cs' ? 'active' : ''} aria-pressed={language === 'cs'} onClick={() => onChange('cs')}>
+        CZ
+      </button>
+    </div>
+  );
+}
 
 export function LogOverlay({
   state,
@@ -24,6 +44,8 @@ export function LogOverlay({
   onPush: () => void;
 }) {
   const [exportOpen, setExportOpen] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const logTouch = useRef<{ x: number; y: number } | null>(null);
   const entries = filteredLog(state);
   const total = entries.reduce((sum, entry) => sum + timeToMinutes(entry.dur), 0);
   const filters = {
@@ -31,12 +53,12 @@ export function LogOverlay({
     pilots: [...new Set(state.log.flatMap((entry) => entry.pilots).filter(Boolean))]
   };
   return (
-    <div id="log-overlay" class="open">
+    <div id="log-overlay" class={`open${editMode ? ' edit-active' : ''}`}>
       <div class="log-hdr">
-        <span class="log-hdr-title">FLIGHT LOG</span>
+        <span class="log-hdr-title">{translate(state.language, 'log')}</span>
         <div class="export-dropdown">
           <button class="log-hdr-btn export" onClick={() => setExportOpen(!exportOpen)}>
-            EXPORT ▾
+            {translate(state.language, 'export')} ▾
           </button>
           <div class={`export-menu${exportOpen ? ' open' : ''}`}>
             <button onClick={onExport}>📄 EXPORT PDF</button>
@@ -44,75 +66,88 @@ export function LogOverlay({
           </div>
         </div>
         <button class="log-hdr-btn" onClick={onClose}>
-          CLOSE
+          {translate(state.language, 'close')}
         </button>
       </div>
       <div class="log-filter-bar">
-        <span class="filter-lbl">FILTER</span>
-        <select
-          class="filter-sel"
-          value={state.logFilter}
-          onChange={(event) => onPatch({ logFilter: event.currentTarget.value })}
-        >
-          <option value="">ALL FLIGHTS</option>
-          <optgroup label="BY AIRCRAFT">
+        <span class="filter-lbl">{translate(state.language, 'filter')}</span>
+        <select class="filter-sel" value={state.logFilter} onChange={(event) => onPatch({ logFilter: event.currentTarget.value })}>
+          <option value="">{translate(state.language, 'filterAll')}</option>
+          <optgroup label={translate(state.language, 'byAircraft')}>
             {filters.regs.map((reg) => (
               <option value={`reg::${reg}`}>{reg}</option>
             ))}
           </optgroup>
-          <optgroup label="BY PILOT">
+          <optgroup label={translate(state.language, 'byPilot')}>
             {filters.pilots.map((pilot) => (
               <option value={`pilot::${pilot}`}>{pilot}</option>
             ))}
           </optgroup>
         </select>
         <button class="filter-all" onClick={() => onPatch({ logFilter: '' })}>
-          ALL
+          {translate(state.language, 'all')}
         </button>
         <button
           class={`filter-tz-btn${state.utcMode ? ' utc-on' : ''}`}
           onClick={() => onPatch({ utcMode: !state.utcMode })}
         >
-          {state.utcMode ? 'UTC' : 'LOCAL'}
+          {state.utcMode ? 'UTC' : utcOffsetLabel()}
         </button>
       </div>
       <div class="log-stats">
-        {entries.length} FLIGHTS | {new Set(entries.map((entry) => entry.num)).size} TAKEOFFS |
+        {entries.length} {translate(state.language, 'flightsHeader')} | {new Set(entries.map((entry) => entry.num)).size} {translate(state.language, 'takeoffs')} |
         TOTAL: {pad2(Math.floor(total / 60))}:{pad2(total % 60)}{' '}
-        {state.utcMode ? '(UTC)' : '(LCL)'}
+        {state.utcMode ? '(UTC)' : `(${utcOffsetLabel()})`}
       </div>
-      <div class="log-wrap">
+      <div
+        class={`log-wrap${editMode ? ' edit-mode' : ''}`}
+        onTouchStart={(event) => {
+          const point = event.touches[0];
+          if (point) logTouch.current = { x: point.clientX, y: point.clientY };
+        }}
+        onTouchEnd={(event) => {
+          const start = logTouch.current;
+          const end = event.changedTouches[0];
+          logTouch.current = null;
+          if (!start || !end) return;
+          const dx = end.clientX - start.x;
+          const dy = end.clientY - start.y;
+          if (Math.abs(dx) <= 52 || Math.abs(dx) <= Math.abs(dy) * 1.4) return;
+          if (dx < 0) setEditMode(true);
+          else if (editMode) setEditMode(false);
+        }}
+      >
         <table class="log-tbl">
           <thead>
             <tr>
               <th>#</th>
-              <th>AC TYPE</th>
-              <th>REG</th>
-              <th>PILOT 1</th>
-              <th>PILOT 2</th>
-              <th>T/O</th>
-              <th>LDG</th>
-              <th>DUR</th>
+              <th>{translate(state.language, 'acType')}</th>
+              <th>{translate(state.language, 'reg')}</th>
+              <th>{translate(state.language, 'pilot1')}</th>
+              <th>{translate(state.language, 'pilot2')}</th>
+              <th>{translate(state.language, 'takeoffShort')}</th>
+              <th>{translate(state.language, 'landingShort')}</th>
+              <th>{translate(state.language, 'dur')}</th>
               <th>NOTE</th>
               <th />
             </tr>
           </thead>
           <tbody>
             {entries.map((entry) => (
-              <tr key={entry.id}>
-                <td class="mono">{entry.num}</td>
+              <tr class={`flight-row ${entry.num % 2 ? 'odd' : 'even'}`} key={entry.id}>
+                <td class="mono flight-num">{entry.num}</td>
                 <td>{entry.acType}</td>
                 <td class="mono">{entry.reg}</td>
-                <td class="log-edit-td" onClick={() => onEdit(entry.id, 'pilot0')}>
+                <td class={`log-edit-td${editMode ? '' : ' edit-locked'}`} aria-disabled={!editMode} onClick={() => editMode && onEdit(entry.id, 'pilot0')}>
                   {entry.pilots[0] || '-'}
                 </td>
-                <td class="log-edit-td" onClick={() => onEdit(entry.id, 'pilot1')}>
+                <td class={`log-edit-td${editMode ? '' : ' edit-locked'}`} aria-disabled={!editMode} onClick={() => editMode && onEdit(entry.id, 'pilot1')}>
                   {entry.pilots[1] || '+'}
                 </td>
-                <td class="log-edit-td mono" onClick={() => onEditTime(entry, 'toTime')}>
+                <td class={`log-edit-td mono${editMode ? '' : ' edit-locked'}`} aria-disabled={!editMode} onClick={() => editMode && onEditTime(entry, 'toTime')}>
                   {state.utcMode ? localToUTC(entry.toTime) : entry.toTime}
                 </td>
-                <td class="log-edit-td mono" onClick={() => onEditTime(entry, 'ldgTime')}>
+                <td class={`log-edit-td mono${editMode ? '' : ' edit-locked'}`} aria-disabled={!editMode} onClick={() => editMode && onEditTime(entry, 'ldgTime')}>
                   {entry.ldgTime
                     ? state.utcMode
                       ? localToUTC(entry.ldgTime)
@@ -120,10 +155,10 @@ export function LogOverlay({
                     : '-'}
                 </td>
                 <td class="mono">{entry.dur || '-'}</td>
-                <td class="note-td" onClick={() => onEdit(entry.id, 'note')}>
+                <td class={`note-td${editMode ? '' : ' edit-locked'}`} aria-disabled={!editMode} onClick={() => editMode && onEdit(entry.id, 'note')}>
                   {entry.note || '+'}
                 </td>
-                <td class="log-del-td" onClick={() => onDelete(entry)}>
+                <td class={`log-del-td${editMode ? '' : ' edit-locked'}`} aria-disabled={!editMode} onClick={() => editMode && onDelete(entry)}>
                   ✕
                 </td>
               </tr>
@@ -131,6 +166,14 @@ export function LogOverlay({
           </tbody>
         </table>
         {!entries.length && <div class="log-empty">NO FLIGHTS LOGGED</div>}
+        {entries.length > 0 && (
+          <div class={`log-edit-hint${editMode ? ' active' : ''}`}>
+            {editMode ? translate(state.language, 'editActive') : translate(state.language, 'swipeEdit')}
+            <button class="log-edit-toggle" onClick={() => setEditMode(!editMode)}>
+              {editMode ? translate(state.language, 'lock') : translate(state.language, 'edit')}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -138,22 +181,18 @@ export function LogOverlay({
 
 export function Settings({
   state,
-  autoSync,
   client,
   onClose,
   onPatch,
-  onAutoSync,
   onSync,
   onManager,
   onLogout,
   onClearLog
 }: {
   state: AppState;
-  autoSync: boolean;
   client: KlubkoClient;
   onClose: () => void;
   onPatch: (patch: Partial<AppState>) => void;
-  onAutoSync: (value: boolean) => void;
   onSync: () => void;
   onManager: (kind: 'planes' | 'pilots') => void;
   onLogout: () => void;
@@ -163,81 +202,73 @@ export function Settings({
     <div id="settings-overlay">
       <div class="settings-box">
         <div class="settings-hdr">
-          <span class="settings-title">SETTINGS</span>
+          <span class="settings-title">{translate(state.language, 'settings')}</span>
           <button class="settings-close" onClick={onClose}>
-            DONE
+            {translate(state.language, 'done')}
           </button>
         </div>
         <div class="settings-body">
           <div class="settings-section">
-            <div class="settings-sec-hdr">ACCOUNT</div>
-            <div class="auth-status">LOGGED IN AS {client.getConfig().username}</div>
-            <button class="settings-row-btn danger" onClick={onLogout}>
-              LOG OUT
-            </button>
+            <div class="settings-sec-hdr">{translate(state.language, 'account')}</div>
+            <div class="account-row">
+              <div class="auth-status">
+                <img
+                  class="account-logo"
+                  src={`${import.meta.env.BASE_URL}icon_${
+                    state.theme === 'dark' ? 'darkmode' : 'lightmode'
+                  }.svg`}
+                  alt=""
+                />
+                <span class="account-copy">
+                  <span class="account-label">{translate(state.language, 'loggedInAs')}</span>
+                  <strong class="account-username">{client.getConfig().username}</strong>
+                </span>
+              </div>
+              <button class="settings-row-btn danger account-logout" onClick={onLogout}>
+                {translate(state.language, 'logout')}
+              </button>
+            </div>
           </div>
           <div class="settings-section">
             <div class="settings-sec-hdr">LANGUAGE</div>
-            <select
-              class="language-select"
-              value={state.language}
-              onChange={(event) =>
-                onPatch({ language: event.currentTarget.value as 'en' | 'cs' })
-              }
-            >
-              <option value="en">EN</option>
-              <option value="cs">CZ</option>
-            </select>
-          </div>
-          <div class="settings-section">
-            <div class="settings-sec-hdr">SYNC</div>
-            <label class="auth-chk-row">
-              <input
-                type="checkbox"
-                checked={autoSync}
-                onChange={(event) => onAutoSync(event.currentTarget.checked)}
+            <div class="settings-language-control">
+              <LanguageSwitch
+              language={state.language}
+              onChange={(language) => onPatch({ language })}
               />
-              <span>AUTO-SYNC ONLINE</span>
-            </label>
+            </div>
+          </div>
+          <div class="settings-section">
+            <div class="settings-sec-hdr">{translate(state.language, 'sync')}</div>
             <button class="settings-row-btn" onClick={onSync}>
-              SYNC PLANES & PILOTS NOW
+              {translate(state.language, 'syncNow')}
             </button>
           </div>
           <div class="settings-section">
-            <div class="settings-sec-hdr">PRESET MANAGEMENT</div>
-            <div class="setup-hint">AIRCRAFT ADDED ({state.dayPlanes.length})</div>
-            <PresetChips
-              values={state.dayPlanes}
-              onRemove={(reg) =>
-                onPatch({ dayPlanes: state.dayPlanes.filter((item) => item !== reg) })
-              }
-            />
+            <div class="settings-sec-hdr">{translate(state.language, 'presetManagement')}</div>
             <button class="settings-row-btn" onClick={() => onManager('planes')}>
-              MANAGE PLANES
+              <span class="settings-action-icon" aria-hidden="true">✈</span>
+              {translate(state.language, 'managePlanes')}
             </button>
-            <div class="setup-hint">PILOTS ADDED ({state.dayPilots.length})</div>
-            <PresetChips
-              values={state.dayPilots}
-              onRemove={(pilot) =>
-                onPatch({ dayPilots: state.dayPilots.filter((item) => item !== pilot) })
-              }
-            />
             <button class="settings-row-btn" onClick={() => onManager('pilots')}>
-              MANAGE PILOTS
+              <span class="settings-action-icon" aria-hidden="true">♙</span>
+              {translate(state.language, 'managePilots')}
             </button>
           </div>
           <div class="settings-section">
-            <div class="settings-sec-hdr">OTHER</div>
+            <div class="settings-sec-hdr">{translate(state.language, 'other')}</div>
             <button class="settings-row-btn danger-soft" onClick={onClearLog}>
-              CLEAR FLIGHT LOG
+              {translate(state.language, 'clearFlightLog')}
             </button>
             <button
               class="settings-row-btn"
               onClick={() => onPatch({ theme: state.theme === 'dark' ? 'light' : 'dark' })}
             >
-              {state.theme === 'dark' ? '☀ LIGHT MODE' : '☾ DARK MODE'}
+              {state.theme === 'dark'
+                ? `☀ ${translate(state.language, 'lightMode')}`
+                : `☾ ${translate(state.language, 'darkMode')}`}
             </button>
-            <div class="setup-hint">Airfield: {state.airport} (non-editable)</div>
+            <div class="setup-hint">{translate(state.language, 'airfield')}: {state.airport} (non-editable)</div>
           </div>
         </div>
       </div>
