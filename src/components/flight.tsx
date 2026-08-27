@@ -2,7 +2,15 @@
 
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Aircraft, AppState, ComposerMode, ComposerSlot, LogEntry, RecentConfig } from '../types';
-import { airbornePilots, airborneRegistrations, composerPilots, isComposerReady, sortLog } from '../domain';
+import {
+  airbornePilots,
+  airborneRegistrations,
+  canAssignPilotToSeat,
+  composerPilots,
+  isComposerReady,
+  orderPilotsForSelection,
+  sortLog
+} from '../domain';
 import { localTime } from '../time';
 import { translate } from '../i18n';
 
@@ -384,11 +392,27 @@ export function BottomPanel({
         state.dayPilots.includes(pilot) &&
         (!search || pilot.toLowerCase().includes(search.toLowerCase()))
     );
-    const orderedPilots = [...pilots].sort((first, second) => {
-      const firstBlocked = blockedAirborne.has(first) || blockedComposer.has(first);
-      const secondBlocked = blockedAirborne.has(second) || blockedComposer.has(second);
-      return Number(firstBlocked) - Number(secondBlocked);
-    });
+    const focusedPlane =
+      state.focus.slot === 'tow'
+        ? state.comp.tow.plane
+        : state.comp[state.focus.slot].plane;
+    const focusedSeat = state.focus.sub === 'p1' ? 'p1' : 'p0';
+    const passengerOnlyBlocked = new Set(
+      pilots.filter((pilot) =>
+        !canAssignPilotToSeat(
+          pilot,
+          state.focus!.slot,
+          focusedSeat,
+          focusedPlane?.seats ?? 0
+        )
+      )
+    );
+    const selectionBlocked = new Set([...blockedComposer, ...passengerOnlyBlocked]);
+    const orderedPilots = orderPilotsForSelection(
+      pilots,
+      blockedAirborne,
+      selectionBlocked
+    );
     return (
       <SelectionPanel
         label={`${translate(state.language, 'selectPilot')}${state.focus.sub === 'p1' ? '2' : '1'}`}
@@ -400,7 +424,9 @@ export function BottomPanel({
         <div class="drag-hint-bar">{translate(state.language, 'dragToSlot')}</div>
         <div class="pilots-grid">
           {orderedPilots.map((pilot) => {
-            const reason = blockedAirborne.has(pilot)
+            const reason = passengerOnlyBlocked.has(pilot)
+              ? translate(state.language, 'passengerOnly')
+              : blockedAirborne.has(pilot)
                 ? translate(state.language, 'airborne')
               : blockedComposer.has(pilot)
                 ? translate(state.language, 'inUse')
@@ -591,7 +617,14 @@ export function LiveClock() {
     const timer = window.setInterval(() => setTime(localTime()), 8000);
     return () => window.clearInterval(timer);
   }, []);
-  return <span class="clk live-clock">{time}</span>;
+  const [hours, minutes] = time.split(':');
+  return (
+    <span class="clk live-clock" aria-label={time}>
+      <span>{hours}</span>
+      <span class="clock-colon" aria-hidden="true">:</span>
+      <span>{minutes}</span>
+    </span>
+  );
 }
 
 export function filteredLog(state: AppState): LogEntry[] {

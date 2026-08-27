@@ -21,7 +21,6 @@ interface ApiEnvelope {
 export interface KlubkoClient {
   getConfig(): KlubkoConfig;
   setUseTest(value: boolean): void;
-  setProxy(value: string): void;
   login(username: string, password: string): Promise<void>;
   logout(): Promise<void>;
   verifySession(): Promise<void>;
@@ -76,11 +75,6 @@ export class HttpKlubkoClient implements KlubkoClient {
 
   setUseTest(value: boolean): void {
     this.config.useTest = value;
-    this.saveConfig();
-  }
-
-  setProxy(value: string): void {
-    this.config.proxyUrl = normalizeProxy(value);
     this.saveConfig();
   }
 

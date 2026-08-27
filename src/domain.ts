@@ -3,6 +3,7 @@ import type {
   Aircraft,
   AirborneFlight,
   AppState,
+  ComposerSlot,
   ComposerState,
   FlightRole,
   LogEntry,
@@ -26,24 +27,63 @@ export function isComposerReady(state: AppState): boolean {
     return Boolean(
       state.comp.tow.plane &&
         state.comp.tow.pilot &&
+        !isReusablePassengerPlaceholder(state.comp.tow.pilot) &&
         state.comp.glider.plane &&
-        state.comp.glider.pilots[0]
+        state.comp.glider.pilots[0] &&
+        !isReusablePassengerPlaceholder(state.comp.glider.pilots[0])
     );
   }
-  return Boolean(state.comp.single.plane && state.comp.single.pilots[0]);
+  return Boolean(
+    state.comp.single.plane &&
+      state.comp.single.pilots[0] &&
+      !isReusablePassengerPlaceholder(state.comp.single.pilots[0])
+  );
+}
+
+export const REUSABLE_PASSENGER_PLACEHOLDER = '+1 osoba';
+
+export function isReusablePassengerPlaceholder(pilot: string): boolean {
+  return pilot.trim().toLocaleLowerCase() === REUSABLE_PASSENGER_PLACEHOLDER;
+}
+
+export function canAssignPilotToSeat(
+  pilot: string,
+  slot: ComposerSlot,
+  sub: 'p0' | 'p1',
+  seatCount: number
+): boolean {
+  return (
+    !isReusablePassengerPlaceholder(pilot) ||
+    (slot !== 'tow' && sub === 'p1' && seatCount > 1)
+  );
 }
 
 export function airbornePilots(flights: AirborneFlight[]): Set<string> {
   const result = new Set<string>();
+  const addPilot = (pilot: string) => {
+    if (!isReusablePassengerPlaceholder(pilot)) result.add(pilot);
+  };
   for (const flight of flights) {
     if (flight.type === 'aerotow') {
-      if (!flight.tow.ldgTime) result.add(flight.tow.pilot);
-      if (!flight.glider.ldgTime) flight.glider.pilots.forEach((pilot) => result.add(pilot));
+      if (!flight.tow.ldgTime) addPilot(flight.tow.pilot);
+      if (!flight.glider.ldgTime) flight.glider.pilots.forEach(addPilot);
     } else if (!flight.ldgTime) {
-      flight.pilots.forEach((pilot) => result.add(pilot));
+      flight.pilots.forEach(addPilot);
     }
   }
   return result;
+}
+
+export function orderPilotsForSelection(
+  pilots: string[],
+  blockedAirborne: ReadonlySet<string>,
+  blockedComposer: ReadonlySet<string>
+): string[] {
+  const rank = (pilot: string): number => {
+    if (blockedAirborne.has(pilot) || blockedComposer.has(pilot)) return 2;
+    return isReusablePassengerPlaceholder(pilot) ? 1 : 0;
+  };
+  return [...pilots].sort((first, second) => rank(first) - rank(second));
 }
 
 export function airborneRegistrations(flights: AirborneFlight[]): Set<string> {
@@ -81,7 +121,14 @@ export function createTakeoff(state: AppState, time: string): AirborneFlight {
     const towPilot = state.comp.tow.pilot;
     const gliderPlane = state.comp.glider.plane;
     const gliderPilots = state.comp.glider.pilots.filter((pilot): pilot is string => Boolean(pilot));
-    if (!towPlane || !towPilot || !gliderPlane || !gliderPilots[0]) {
+    if (
+      !towPlane ||
+      !towPilot ||
+      isReusablePassengerPlaceholder(towPilot) ||
+      !gliderPlane ||
+      !gliderPilots[0] ||
+      isReusablePassengerPlaceholder(gliderPilots[0])
+    ) {
       throw new Error('Takeoff is incomplete');
     }
     return {
@@ -100,7 +147,9 @@ export function createTakeoff(state: AppState, time: string): AirborneFlight {
   }
   const plane = state.comp.single.plane;
   const pilots = state.comp.single.pilots.filter((pilot): pilot is string => Boolean(pilot));
-  if (!plane || !pilots[0]) throw new Error('Takeoff is incomplete');
+  if (!plane || !pilots[0] || isReusablePassengerPlaceholder(pilots[0])) {
+    throw new Error('Takeoff is incomplete');
+  }
   return {
     id: uid(),
     type: 'single',
@@ -140,18 +189,54 @@ export function recentFromComposer(state: AppState): RecentConfig {
   };
 }
 
+function recentConfigKey(config: RecentConfig): string {
+  const normalize = (value: string): string => value.trim().toLocaleLowerCase();
+  if (config.mode === 'aerotow') {
+    return [
+      config.mode,
+      normalize(config.tow.plane.reg),
+      normalize(config.tow.pilot),
+      normalize(config.glider.plane.reg),
+      ...config.glider.pilots.map(normalize)
+    ].join('|');
+  }
+  return [
+    config.mode,
+    normalize(config.single.plane.reg),
+    ...config.single.pilots.map(normalize)
+  ].join('|');
+}
+
+export function dedupeRecentConfigs(configs: RecentConfig[]): RecentConfig[] {
+  const seen = new Set<string>();
+  return configs.filter((config) => {
+    let key: string;
+    try {
+      key = recentConfigKey(config);
+    } catch {
+      return true;
+    }
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export interface LandingResult {
   airborne: AirborneFlight[];
   addedLog: LogEntry[];
 }
 
 function aerotowLog(flight: AerotowAirborneFlight): LogEntry[] {
-  const pair = uid();
+  const towBase = flight.reopenedLog?.tow;
+  const gliderBase = flight.reopenedLog?.glider;
+  const pair = towBase?.pair || gliderBase?.pair || uid();
   return [
     {
-      id: uid(),
+      ...towBase,
+      id: towBase?.id || uid(),
       num: flight.num,
-      date: localDateISO(),
+      date: towBase?.date || localDateISO(),
       toTime: flight.toTime,
       fn: 'tow',
       reg: flight.tow.plane.reg,
@@ -159,13 +244,15 @@ function aerotowLog(flight: AerotowAirborneFlight): LogEntry[] {
       pilots: [flight.tow.pilot],
       ldgTime: flight.tow.ldgTime,
       dur: flight.tow.dur,
-      note: '',
+      note: towBase?.note || '',
+      synced: false,
       pair
     },
     {
-      id: uid(),
+      ...gliderBase,
+      id: gliderBase?.id || uid(),
       num: flight.num,
-      date: localDateISO(),
+      date: gliderBase?.date || localDateISO(),
       toTime: flight.toTime,
       fn: flight.glider.plane.fn,
       reg: flight.glider.plane.reg,
@@ -173,7 +260,8 @@ function aerotowLog(flight: AerotowAirborneFlight): LogEntry[] {
       pilots: flight.glider.pilots,
       ldgTime: flight.glider.ldgTime,
       dur: flight.glider.dur,
-      note: '',
+      note: gliderBase?.note || '',
+      synced: false,
       pair
     }
   ];
@@ -202,13 +290,15 @@ export function landFlight(
   flight.ldgTime = time;
   flight.dur = calculateDuration(flight.toTime, time);
   airborne.splice(index, 1);
+  const base = flight.reopenedLog;
   return {
     airborne,
     addedLog: [
       {
-        id: uid(),
+        ...base,
+        id: base?.id || uid(),
         num: flight.num,
-        date: localDateISO(),
+        date: base?.date || localDateISO(),
         toTime: flight.toTime,
         fn: flight.plane.fn,
         reg: flight.plane.reg,
@@ -216,10 +306,96 @@ export function landFlight(
         pilots: flight.pilots,
         ldgTime: time,
         dur: flight.dur,
-        note: '',
+        note: base?.note || '',
+        synced: false,
         pair: null
       }
     ]
+  };
+}
+
+export interface ReopenResult {
+  airborne: AirborneFlight[];
+  log: LogEntry[];
+  reopened: AirborneFlight | null;
+}
+
+function aircraftFromLog(entry: LogEntry, planes: Aircraft[]): Aircraft {
+  const known = planes.find((plane) => plane.reg === entry.reg);
+  if (known) return { ...known };
+  return {
+    id: uid(),
+    reg: entry.reg,
+    type: entry.acType,
+    seats: Math.max(1, entry.pilots.filter(Boolean).length),
+    fn: entry.fn,
+    takeoffTypes: []
+  };
+}
+
+export function reopenLogEntry(state: AppState, entryId: string): ReopenResult {
+  const selected = state.log.find((entry) => entry.id === entryId);
+  if (!selected) return { airborne: state.airborne, log: state.log, reopened: null };
+
+  const partner = selected.pair
+    ? state.log.find(
+        (entry) => entry.pair === selected.pair && entry.id !== selected.id
+      )
+    : undefined;
+  const towEntry = selected.fn === 'tow' ? selected : partner?.fn === 'tow' ? partner : undefined;
+  const gliderEntry = selected.fn !== 'tow' ? selected : partner?.fn !== 'tow' ? partner : undefined;
+
+  if (towEntry && gliderEntry) {
+    const reopenTow = selected.id === towEntry.id;
+    const flight: AerotowAirborneFlight = {
+      id: uid(),
+      type: 'aerotow',
+      num: selected.num,
+      toTime: selected.toTime,
+      tow: {
+        plane: aircraftFromLog(towEntry, state.planes),
+        pilot: towEntry.pilots[0] || '',
+        ldgTime: reopenTow ? null : towEntry.ldgTime,
+        dur: reopenTow ? null : towEntry.dur
+      },
+      glider: {
+        plane: aircraftFromLog(gliderEntry, state.planes),
+        pilots: gliderEntry.pilots.filter(Boolean),
+        ldgTime: reopenTow ? gliderEntry.ldgTime : null,
+        dur: reopenTow ? gliderEntry.dur : null
+      },
+      reopenedLog: {
+        tow: structuredClone(towEntry),
+        glider: structuredClone(gliderEntry)
+      }
+    };
+    const removed = new Set([towEntry.id, gliderEntry.id]);
+    return {
+      airborne: [...state.airborne, flight],
+      log: state.log.filter((entry) => !removed.has(entry.id)),
+      reopened: flight
+    };
+  }
+
+  const flight: AirborneFlight = {
+    id: uid(),
+    type: 'single',
+    num: selected.num,
+    toTime: selected.toTime,
+    plane: aircraftFromLog(selected, state.planes),
+    pilots: selected.pilots.filter(Boolean),
+    ldgTime: null,
+    dur: null,
+    reopenedLog: structuredClone(selected)
+  };
+  return {
+    airborne: [...state.airborne, flight],
+    log: state.log
+      .filter((entry) => entry.id !== selected.id)
+      .map((entry) =>
+        entry.pair === selected.pair ? { ...entry, pair: null } : entry
+      ),
+    reopened: flight
   };
 }
 

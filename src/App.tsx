@@ -9,7 +9,8 @@ import {
   LogOverlay,
   PresetManager,
   PushDialog,
-  Settings
+  Settings,
+  UnappliedLogDialog
 } from './components/overlays';
 import {
   Header,
@@ -20,16 +21,19 @@ import {
 import {
   airbornePilots,
   airborneRegistrations,
+  canAssignPilotToSeat,
   composerPilots,
   createTakeoff,
+  dedupeRecentConfigs,
   emptyComposer,
   isComposerReady,
   landFlight,
   normalizeReferenceData,
-  recentFromComposer
+  recentFromComposer,
+  reopenLogEntry
 } from './domain';
 import { analyzePush, computeSnap, type KlubkoClient } from './klubko';
-import type { AppRepository } from './persistence';
+import { rolloverDailyState, type AppRepository } from './persistence';
 import type { FlightSyncService, SyncStatus } from './sync';
 import type {
   Aircraft,
@@ -81,6 +85,14 @@ interface Toast {
   id: number;
   message: string;
 }
+
+interface PushSource {
+  kind: 'current' | 'pending';
+  date: string;
+  entries: LogEntry[];
+}
+
+const COMPOSER_SELECTION_HISTORY_KEY = 'smirkaComposerSelection';
 
 
 function flightAsLogEntries(flight: AppState['airborne'][number]): LogEntry[] {
@@ -139,11 +151,46 @@ export function App({ services }: { services: Services }) {
   const [timeDialog, setTimeDialog] = useState<TimeDialogState | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(services.sync.status());
-  const [autoSync, setAutoSync] = useState(true);
+  const [autoSync] = useState(true);
   const [pushAnalysis, setPushAnalysis] = useState<PushAnalysis | null>(null);
   const [pushBusy, setPushBusy] = useState(false);
+  const [pushSource, setPushSource] = useState<PushSource | null>(null);
+  const [dismissedPendingDate, setDismissedPendingDate] = useState<string | null>(null);
   const toastId = useRef(0);
   const bottomTouch = useRef<{ x: number; y: number } | null>(null);
+  const composerSelectionHistory = useRef(false);
+  const suppressComposerSelectionPop = useRef(false);
+
+  const openComposerSelectionHistory = () => {
+    if (composerSelectionHistory.current) return;
+    const current =
+      window.history.state && typeof window.history.state === 'object'
+        ? window.history.state
+        : {};
+    window.history.pushState(
+      { ...current, [COMPOSER_SELECTION_HISTORY_KEY]: true },
+      '',
+      window.location.href
+    );
+    composerSelectionHistory.current = true;
+  };
+
+  const releaseComposerSelectionHistory = () => {
+    if (!composerSelectionHistory.current) return;
+    composerSelectionHistory.current = false;
+    if (window.history.state?.[COMPOSER_SELECTION_HISTORY_KEY]) {
+      suppressComposerSelectionPop.current = true;
+      window.history.back();
+    }
+  };
+
+  const dismissComposerSelection = () => {
+    dispatch({
+      type: 'patch',
+      patch: { focus: null, bottomMode: 'idle' }
+    });
+    releaseComposerSelectionHistory();
+  };
 
   const notify = (message: string, timeout = 1800) => {
     const id = ++toastId.current;
@@ -153,6 +200,27 @@ export function App({ services }: { services: Services }) {
       timeout
     );
   };
+
+  useEffect(() => {
+    const rollover = () => {
+      dispatch({
+        type: 'update',
+        update: (current) => rolloverDailyState(current)
+      });
+    };
+    const onVisibilityChange = () => {
+      if (!document.hidden) rollover();
+    };
+    rollover();
+    const timer = window.setInterval(rollover, 30 * 1000);
+    window.addEventListener('focus', rollover);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', rollover);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, []);
 
   useEffect(() => {
     document.body.dataset.theme = state.theme;
@@ -179,6 +247,30 @@ export function App({ services }: { services: Services }) {
   );
 
   useEffect(() => services.sync.onChange(setSyncStatus), [services.sync]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      if (suppressComposerSelectionPop.current) {
+        suppressComposerSelectionPop.current = false;
+        return;
+      }
+      if (!composerSelectionHistory.current) return;
+      composerSelectionHistory.current = false;
+      dispatch({
+        type: 'patch',
+        patch: { focus: null, bottomMode: 'idle' }
+      });
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  useEffect(() => {
+    const selectionOpen =
+      Boolean(state.focus) &&
+      (state.bottomMode === 'planes' || state.bottomMode === 'pilots');
+    if (!selectionOpen) releaseComposerSelectionHistory();
+  }, [state.focus, state.bottomMode]);
 
   useEffect(() => {
     const online = () => {
@@ -246,6 +338,7 @@ export function App({ services }: { services: Services }) {
     slot: ComposerSlot,
     sub?: 'plane' | 'p0' | 'p1'
   ) => {
+    openComposerSelectionHistory();
     const plane =
       slot === 'tow'
         ? state.comp.tow.plane
@@ -284,6 +377,12 @@ export function App({ services }: { services: Services }) {
 
   const selectPilot = (pilot: string, target = state.focus) => {
     if (!target || target.sub === 'plane') return;
+    const targetPlane =
+      target.slot === 'tow' ? state.comp.tow.plane : state.comp[target.slot].plane;
+    if (!canAssignPilotToSeat(pilot, target.slot, target.sub, targetPlane?.seats ?? 0)) {
+      notify('+1 OSOBA IS A PASSENGER ONLY');
+      return;
+    }
     if (airbornePilots(state.airborne).has(pilot)) {
       notify(`${pilot.split(' ')[0]!.toUpperCase()} IS AIRBORNE`);
       return;
@@ -329,7 +428,7 @@ export function App({ services }: { services: Services }) {
       ...current,
       airborne: [...current.airborne, flight],
       takeoffs: current.takeoffs + 1,
-      recentConfigs: [recent, ...current.recentConfigs].slice(0, 5),
+      recentConfigs: dedupeRecentConfigs([recent, ...current.recentConfigs]).slice(0, 5),
       comp: emptyComposer(),
       focus: null,
       bottomMode: 'idle'
@@ -353,6 +452,7 @@ export function App({ services }: { services: Services }) {
       ...current,
       airborne: result.airborne,
       log: [...current.log, ...result.addedLog],
+      dayFinalized: result.addedLog.length ? false : current.dayFinalized,
       landId: null,
       landSlot: null,
       bottomMode: 'idle'
@@ -370,13 +470,21 @@ export function App({ services }: { services: Services }) {
       const tow = state.planes.find((plane) => plane.reg === config.tow.plane.reg);
       if (tow && !unavailablePlanes.has(tow.reg)) {
         comp.tow.plane = tow;
-        if (!unavailablePilots.has(config.tow.pilot)) comp.tow.pilot = config.tow.pilot;
+        if (
+          !unavailablePilots.has(config.tow.pilot) &&
+          canAssignPilotToSeat(config.tow.pilot, 'tow', 'p0', tow.seats)
+        ) comp.tow.pilot = config.tow.pilot;
       }
       const glider = state.planes.find((plane) => plane.reg === config.glider.plane.reg);
       if (glider && !unavailablePlanes.has(glider.reg)) {
         comp.glider.plane = glider;
         config.glider.pilots.forEach((pilot, index) => {
-          if (index < 2 && !unavailablePilots.has(pilot)) comp.glider.pilots[index] = pilot;
+          const sub = index === 0 ? 'p0' : 'p1';
+          if (
+            index < 2 &&
+            !unavailablePilots.has(pilot) &&
+            canAssignPilotToSeat(pilot, 'glider', sub, glider.seats)
+          ) comp.glider.pilots[index] = pilot;
         });
       }
     } else {
@@ -384,7 +492,12 @@ export function App({ services }: { services: Services }) {
       if (plane && !unavailablePlanes.has(plane.reg)) {
         comp.single.plane = plane;
         config.single.pilots.forEach((pilot, index) => {
-          if (index < 2 && !unavailablePilots.has(pilot)) comp.single.pilots[index] = pilot;
+          const sub = index === 0 ? 'p0' : 'p1';
+          if (
+            index < 2 &&
+            !unavailablePilots.has(pilot) &&
+            canAssignPilotToSeat(pilot, 'single', sub, plane.seats)
+          ) comp.single.pilots[index] = pilot;
         });
       }
     }
@@ -417,18 +530,12 @@ export function App({ services }: { services: Services }) {
     }
   };
 
-  const deleteLogEntry = (entry: LogEntry) => {
+  const deleteLogEntry = (entry: LogEntry, deletePartner = false) => {
     const partner = entry.pair
       ? state.log.find((candidate) => candidate.pair === entry.pair && candidate.id !== entry.id)
       : undefined;
-    if (
-      !window.confirm(
-        `DELETE FLIGHT #${entry.num} - ${entry.reg}${partner ? ` + ${partner.reg}` : ''}?`
-      )
-    )
-      return;
     let ids = new Set([entry.id]);
-    if (partner && window.confirm(`Also delete aerotow partner ${partner.reg}?`)) {
+    if (partner && deletePartner) {
       ids = new Set([entry.id, partner.id]);
     }
     update((current) => ({
@@ -437,10 +544,38 @@ export function App({ services }: { services: Services }) {
         .filter((item) => !ids.has(item.id))
         .map((item) =>
           item.pair === entry.pair && !ids.has(item.id) ? { ...item, pair: null } : item
-        )
+        ),
+      dayFinalized: false
     }));
-    if (entry.flight_id && entry.snap)
-      services.sync.enqueueDelete(entry.flight_id, entry.snap);
+    [entry, ...(partner && deletePartner ? [partner] : [])].forEach((deleted) => {
+      if (deleted.flight_id && deleted.snap) {
+        services.sync.enqueueDelete(deleted.flight_id, deleted.snap);
+      }
+    });
+  };
+
+  const reopenLoggedFlight = (entry: LogEntry) => {
+    const usedRegistrations = airborneRegistrations(state.airborne);
+    const usedPilots = airbornePilots(state.airborne);
+    if (usedRegistrations.has(entry.reg)) {
+      notify(`${entry.reg} IS ALREADY AIRBORNE`, 2500);
+      return;
+    }
+    const unavailablePilot = entry.pilots.find((pilot) => usedPilots.has(pilot));
+    if (unavailablePilot) {
+      notify(`${unavailablePilot.toUpperCase()} IS ALREADY AIRBORNE`, 2500);
+      return;
+    }
+    const result = reopenLogEntry(state, entry.id);
+    if (!result.reopened) return;
+    patch({ airborne: result.airborne, log: result.log, dayFinalized: false });
+    void services.sync.submitOrQueue(
+      'update',
+      { ...entry, ldgTime: null, dur: '00:00', synced: false },
+      autoSync
+    );
+    setOverlay('none');
+    notify(`${entry.reg} RETURNED TO AIRBORNE`, 2500);
   };
 
   const editEntry = (id: string, field: 'pilot0' | 'pilot1' | 'note') => {
@@ -458,7 +593,8 @@ export function App({ services }: { services: Services }) {
             const pilots = [...item.pilots];
             pilots[index] = value;
             return { ...item, pilots };
-          })
+          }),
+          dayFinalized: false
         }));
       });
       return;
@@ -476,7 +612,8 @@ export function App({ services }: { services: Services }) {
         const pilots = [...item.pilots];
         pilots[index] = value.trim();
         return { ...item, pilots };
-      })
+      }),
+      dayFinalized: false
     }));
   };
 
@@ -543,7 +680,7 @@ export function App({ services }: { services: Services }) {
                   : changed.dur
             };
           });
-          return { ...current, log };
+          return { ...current, log, dayFinalized: false };
         });
       },
       field === 'toTime' ? 'EDIT TAKEOFF TIME' : 'EDIT LANDING TIME'
@@ -587,15 +724,21 @@ export function App({ services }: { services: Services }) {
     }
   };
 
-  const preparePush = async () => {
+  const preparePush = async (source?: PushSource) => {
+    const target = source ?? {
+      kind: 'current' as const,
+      date: localDateISO(),
+      entries: state.log
+    };
+    setPushSource(target);
     setOverlay('push');
     setPushBusy(true);
     setPushAnalysis(null);
     try {
-      const local = state.log.filter(
-        (entry) => entry.toTime && (!entry.date || entry.date === localDateISO())
-      );
-      const server = await services.client.getFlightsOfDay(localDateISO());
+      const local = target.entries
+        .filter((entry) => entry.toTime && (!entry.date || entry.date === target.date))
+        .map((entry) => ({ ...entry, date: entry.date || target.date }));
+      const server = await services.client.getFlightsOfDay(target.date);
       setPushAnalysis(analyzePush(local, server));
     } catch (error) {
       notify(`FAILED TO PREPARE PUSH: ${error instanceof Error ? error.message : String(error)}`, 3000);
@@ -605,28 +748,78 @@ export function App({ services }: { services: Services }) {
   };
 
   const confirmPush = async () => {
-    if (!pushAnalysis) return;
+    if (!pushAnalysis || !pushSource) return;
     setPushBusy(true);
-    const failures: string[] = [];
+    const failures: string[] = [...pushAnalysis.errors];
+    const pushedIds = new Set<string>();
     for (const item of [...pushAnalysis.toCreate, ...pushAnalysis.toUpdate]) {
       try {
         if (item.server) item.api.snap = computeSnap(item.api);
         await services.client.editFlights([item.api]);
-        update((current) => ({
-          ...current,
-          log: current.log.map((entry) =>
-            entry.id === item.local.id ? { ...entry, synced: true } : entry
-          )
-        }));
+        pushedIds.add(item.local.id);
       } catch (error) {
         failures.push(`${item.api.sign}: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
+    update((current) => {
+      if (pushSource.kind === 'pending') {
+        return {
+          ...current,
+          pendingLogs: failures.length
+            ? current.pendingLogs.map((pending) =>
+                pending.date === pushSource.date
+                  ? {
+                      ...pending,
+                      entries: pending.entries.map((entry) =>
+                        pushedIds.has(entry.id) ? { ...entry, synced: true } : entry
+                      )
+                    }
+                  : pending
+              )
+            : current.pendingLogs.filter((pending) => pending.date !== pushSource.date)
+        };
+      }
+      return {
+        ...current,
+        log: current.log.map((entry) =>
+          pushedIds.has(entry.id) ? { ...entry, synced: true } : entry
+        ),
+        dayFinalized: failures.length === 0
+      };
+    });
     setPushBusy(false);
     if (failures.length) notify(`PUSH FINISHED WITH ${failures.length} ERROR(S)`, 3000);
     else {
       notify(`PUSHED ${pushAnalysis.toCreate.length + pushAnalysis.toUpdate.length} FLIGHTS`, 2500);
       setOverlay('none');
+      setPushSource(null);
+    }
+  };
+
+  const exportCurrentLog = async () => {
+    try {
+      await exportFlightLog(
+        filteredLog(state),
+        state.language,
+        state.airport,
+        state.logFilter,
+        localDateISO()
+      );
+      if (!state.logFilter) patch({ dayFinalized: true });
+    } catch {
+      notify('PDF EXPORT FAILED', 2500);
+    }
+  };
+
+  const exportPendingLog = async (date: string, entries: LogEntry[]) => {
+    try {
+      await exportFlightLog(entries, state.language, state.airport, '', date);
+      update((current) => ({
+        ...current,
+        pendingLogs: current.pendingLogs.filter((pending) => pending.date !== date)
+      }));
+    } catch {
+      notify('PDF EXPORT FAILED', 2500);
     }
   };
 
@@ -651,7 +844,25 @@ export function App({ services }: { services: Services }) {
 
   return (
     <>
-      <div id="app">
+      <div
+        id="app"
+        onClick={(event) => {
+          if (
+            !state.focus ||
+            (state.bottomMode !== 'planes' && state.bottomMode !== 'pilots')
+          )
+            return;
+          const target = event.target;
+          if (!(target instanceof Element)) return;
+          if (
+            target.closest(
+              'button, a, input, select, textarea, label, [role="button"]'
+            )
+          )
+            return;
+          dismissComposerSelection();
+        }}
+      >
         <Header
           state={state}
           syncStatus={syncStatus}
@@ -722,14 +933,8 @@ export function App({ services }: { services: Services }) {
           onEdit={editEntry}
           onEditTime={editTime}
           onDelete={deleteLogEntry}
-          onExport={() =>
-            void exportFlightLog(
-              filteredLog(state),
-              state.language,
-              state.airport,
-              state.logFilter
-            ).catch(() => notify('PDF EXPORT FAILED', 2500))
-          }
+          onReopen={reopenLoggedFlight}
+          onExport={() => void exportCurrentLog()}
           onPush={() => void preparePush()}
         />
       )}
@@ -744,7 +949,7 @@ export function App({ services }: { services: Services }) {
           onLogout={() => void services.client.logout()}
           onClearLog={() => {
             if (window.confirm('CLEAR FLIGHT LOG? This cannot be undone.')) {
-              patch({ log: [], takeoffs: 0 });
+              patch({ log: [], takeoffs: 0, dayFinalized: true });
               setOverlay('none');
             }
           }}
@@ -763,10 +968,35 @@ export function App({ services }: { services: Services }) {
         <PushDialog
           analysis={pushAnalysis}
           busy={pushBusy}
-          onClose={() => setOverlay('none')}
+          onClose={() => {
+            setOverlay('none');
+            setPushSource(null);
+          }}
           onConfirm={() => void confirmPush()}
         />
       )}
+      {state.pendingLogs.find((pending) => pending.date !== dismissedPendingDate) &&
+        overlay !== 'push' && (() => {
+          const pending = state.pendingLogs.find(
+            (candidate) => candidate.date !== dismissedPendingDate
+          )!;
+          return (
+            <UnappliedLogDialog
+              language={state.language}
+              date={pending.date}
+              flightCount={pending.entries.length}
+              onLater={() => setDismissedPendingDate(pending.date)}
+              onExport={() => void exportPendingLog(pending.date, pending.entries)}
+              onPush={() =>
+                void preparePush({
+                  kind: 'pending',
+                  date: pending.date,
+                  entries: pending.entries
+                })
+              }
+            />
+          );
+        })()}
       {timeDialog && (
         <TimeDialog
           dialog={timeDialog}

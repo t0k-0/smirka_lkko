@@ -46,6 +46,10 @@ export interface AerotowAirborneFlight {
     ldgTime: string | null;
     dur: string | null;
   };
+  reopenedLog?: {
+    tow: LogEntry;
+    glider: LogEntry;
+  };
 }
 
 export interface SingleAirborneFlight {
@@ -57,6 +61,7 @@ export interface SingleAirborneFlight {
   pilots: string[];
   ldgTime: string | null;
   dur: string | null;
+  reopenedLog?: LogEntry;
 }
 
 export type AirborneFlight = AerotowAirborneFlight | SingleAirborneFlight;
@@ -99,6 +104,11 @@ export interface SingleRecentConfig {
 
 export type RecentConfig = AerotowRecentConfig | SingleRecentConfig;
 
+export interface PendingDailyLog {
+  date: string;
+  entries: LogEntry[];
+}
+
 export interface PersistentState {
   schemaVersion: 1;
   theme: Theme;
@@ -114,6 +124,8 @@ export interface PersistentState {
   presetInitialized: boolean;
   recentConfigs: RecentConfig[];
   date: string;
+  dayFinalized: boolean;
+  pendingLogs: PendingDailyLog[];
 }
 
 export interface AppState extends PersistentState {

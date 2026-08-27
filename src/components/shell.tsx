@@ -11,37 +11,27 @@ interface TimeDialogState {
   confirm: (value: string) => void;
 }
 
+function PasswordEyeIcon({ visible }: { visible: boolean }) {
+  return (
+    <svg class="password-eye-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+      <circle cx="12" cy="12" r="2.6" />
+      {visible && <path d="m4 4 16 16" />}
+    </svg>
+  );
+}
+
 interface Toast {
   id: number;
   message: string;
 }
 
-function LanguageSwitch({
-  language,
-  onChange
-}: {
-  language: 'en' | 'cs';
-  onChange: (language: 'en' | 'cs') => void;
-}) {
+function LogbookIcon() {
   return (
-    <div class="language-switch" role="group" aria-label="Language">
-      <button
-        type="button"
-        class={language === 'en' ? 'active' : ''}
-        aria-pressed={language === 'en'}
-        onClick={() => onChange('en')}
-      >
-        EN
-      </button>
-      <button
-        type="button"
-        class={language === 'cs' ? 'active' : ''}
-        aria-pressed={language === 'cs'}
-        onClick={() => onChange('cs')}
-      >
-        CZ
-      </button>
-    </div>
+    <svg class="logbook-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 4.5h12a2 2 0 0 1 2 2V20H7a2 2 0 0 1-2-2V4.5Z" />
+      <path d="M8 4.5V20M11 9h5M11 13h5" />
+    </svg>
   );
 }
 
@@ -61,7 +51,7 @@ export function Login({
   const config = client.getConfig();
   const [username, setUsername] = useState(config.username);
   const [password, setPassword] = useState('');
-  const [proxy, setProxy] = useState(config.proxyUrl);
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [useTest, setUseTest] = useState(config.useTest);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
@@ -76,7 +66,6 @@ export function Login({
     setStatus('Connecting...');
     try {
       client.setUseTest(useTest);
-      client.setProxy(proxy);
       await client.login(username.trim(), password);
       setStatus('LOGGED IN');
       await onSuccess();
@@ -105,8 +94,8 @@ export function Login({
             value={state.language}
             onChange={(event) => onLanguage(event.currentTarget.value as 'en' | 'cs')}
           >
-            <option value="en">EN</option>
             <option value="cs">CZ</option>
+            <option value="en">EN</option>
           </select>
         </div>
         <div class="login-body">
@@ -143,30 +132,35 @@ export function Login({
           <div class="login-fields">
             <input
               class="form-in"
-              value={proxy}
-              onInput={(event) => setProxy(event.currentTarget.value)}
-              aria-label={translate(state.language, 'proxy')}
-              placeholder={translate(state.language, 'proxy')}
-              autoCapitalize="none"
-              spellcheck={false}
-            />
-            <input
-              class="form-in"
               value={username}
               onInput={(event) => setUsername(event.currentTarget.value)}
               aria-label={translate(state.language, 'user')}
               placeholder={translate(state.language, 'user')}
               autoComplete="username"
             />
-            <input
-              class="form-in"
-              type="password"
-              value={password}
-              onInput={(event) => setPassword(event.currentTarget.value)}
-              aria-label={translate(state.language, 'pass')}
-              placeholder={translate(state.language, 'pass')}
-              autoComplete="current-password"
-            />
+            <div class="password-field">
+              <input
+                class="form-in"
+                type={passwordVisible ? 'text' : 'password'}
+                value={password}
+                onInput={(event) => setPassword(event.currentTarget.value)}
+                aria-label={translate(state.language, 'pass')}
+                placeholder={translate(state.language, 'pass')}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                class="password-eye"
+                aria-label={translate(
+                  state.language,
+                  passwordVisible ? 'hidePassword' : 'showPassword'
+                )}
+                aria-pressed={passwordVisible}
+                onClick={() => setPasswordVisible((visible) => !visible)}
+              >
+                <PasswordEyeIcon visible={passwordVisible} />
+              </button>
+            </div>
           </div>
           <div class="login-status">{status}</div>
           <button class="login-btn" disabled={busy}>
@@ -182,7 +176,7 @@ export function Login({
 
 export function Header({
   state,
-  syncStatus,
+  syncStatus: _syncStatus,
   online,
   onLog,
   onSettings
@@ -197,6 +191,7 @@ export function Header({
   return (
     <div id="hdr">
       <button class="log-pull" onClick={onLog}>
+        <LogbookIcon />
         <span class="log-label">LOG</span>
         <span class="log-arr">▼</span>
       </button>

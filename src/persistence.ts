@@ -1,8 +1,11 @@
-import { emptyComposer } from './domain';
+import { dedupeRecentConfigs, emptyComposer } from './domain';
 import type {
   AppState,
   KlubkoConfig,
+  LogEntry,
+  PendingDailyLog,
   PersistentState,
+  RecentConfig,
   SyncOperation
 } from './types';
 
@@ -21,10 +24,11 @@ export interface AppRepository {
 const APP_KEY = 'gl5';
 const CONFIG_KEY = 'klubko-config';
 const QUEUE_KEY = 'klubko-sync-queue';
+export const KLUBKO_PROXY_URL = 'https://klubko-proxy.onrender.com/';
 
 export const defaultConfig: KlubkoConfig = {
   baseUrl: 'https://klubko.aeroklub-kolin.cz/rest-api/',
-  proxyUrl: 'https://klubko-proxy.onrender.com/',
+  proxyUrl: KLUBKO_PROXY_URL,
   useTest: false,
   authMode: 'password',
   username: '',
@@ -35,7 +39,7 @@ export function defaultState(today = new Date().toDateString()): AppState {
   return {
     schemaVersion: 1,
     theme: 'dark',
-    language: 'en',
+    language: 'cs',
     airport: 'LKKO',
     planes: [],
     pilots: [],
@@ -47,6 +51,8 @@ export function defaultState(today = new Date().toDateString()): AppState {
     presetInitialized: false,
     recentConfigs: [],
     date: today,
+    dayFinalized: false,
+    pendingLogs: [],
     mode: 'aerotow',
     comp: emptyComposer(),
     focus: null,
@@ -62,32 +68,129 @@ function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
 }
 
+function isSameCalendarDay(value: unknown, today: string): boolean {
+  if (value === today) return true;
+  if (typeof value !== 'string') return false;
+  const parsedValue = new Date(value).toDateString();
+  const parsedToday = new Date(today).toDateString();
+  return parsedValue !== 'Invalid Date' && parsedValue === parsedToday;
+}
+
+function logEntriesForDay(entries: LogEntry[], day: string): LogEntry[] {
+  return entries.filter((entry) => !entry.date || isSameCalendarDay(entry.date, day));
+}
+
+function recentConfigsForDay(configs: RecentConfig[], day: string): RecentConfig[] {
+  return dedupeRecentConfigs(
+    configs.filter(
+      (config) =>
+        Number.isFinite(config.ts) &&
+        isSameCalendarDay(new Date(config.ts).toDateString(), day)
+    )
+  );
+}
+
+function calendarDayISO(value: string): string | null {
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const parsed = new Date(value);
+  if (parsed.toString() === 'Invalid Date') return null;
+  const pad = (number: number) => String(number).padStart(2, '0');
+  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}`;
+}
+
+function mergePendingLog(
+  pendingLogs: PendingDailyLog[],
+  dateValue: string,
+  entries: LogEntry[]
+): PendingDailyLog[] {
+  const date = calendarDayISO(dateValue);
+  if (!date || !entries.length) return pendingLogs;
+  const normalizedEntries = entries
+    .filter((entry) => !entry.date || isSameCalendarDay(entry.date, date))
+    .map((entry) => ({ ...entry, date: entry.date || date }));
+  if (!normalizedEntries.length) return pendingLogs;
+  const existing = pendingLogs.find((pending) => pending.date === date)?.entries ?? [];
+  const byId = new Map<string, LogEntry>();
+  [...existing, ...normalizedEntries].forEach((entry) => byId.set(entry.id, entry));
+  return [
+    ...pendingLogs.filter((pending) => pending.date !== date),
+    { date, entries: [...byId.values()] }
+  ].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function normalizePendingLogs(value: unknown): PendingDailyLog[] {
+  return asArray<PendingDailyLog>(value).reduce<PendingDailyLog[]>(
+    (result, pending) =>
+      pending && typeof pending.date === 'string'
+        ? mergePendingLog(result, pending.date, asArray<LogEntry>(pending.entries))
+        : result,
+    []
+  );
+}
+
+export function rolloverDailyState(
+  state: AppState,
+  today = new Date().toDateString()
+): AppState {
+  if (isSameCalendarDay(state.date, today)) return state;
+  const pendingLogs = state.dayFinalized
+    ? state.pendingLogs
+    : mergePendingLog(state.pendingLogs, state.date, logEntriesForDay(state.log, state.date));
+  return {
+    ...state,
+    date: today,
+    log: [],
+    airborne: [],
+    takeoffs: 0,
+    dayPlanes: [],
+    dayPilots: [],
+    presetInitialized: false,
+    recentConfigs: [],
+    dayFinalized: false,
+    pendingLogs,
+    comp: emptyComposer(),
+    focus: null,
+    bottomMode: 'idle',
+    landId: null,
+    landSlot: null,
+    logFilter: ''
+  };
+}
+
 export function migrateState(raw: unknown, today = new Date().toDateString()): AppState {
   const fallback = defaultState(today);
   if (!raw || typeof raw !== 'object') return fallback;
   const source = raw as Record<string, any>;
-  const parsedSourceDay =
-    typeof source.date === 'string' ? new Date(source.date).toDateString() : '';
-  const parsedToday = new Date(today).toDateString();
-  const sameDay =
-    source.date === today ||
-    (parsedSourceDay !== 'Invalid Date' && parsedSourceDay === parsedToday);
+  const sameDay = isSameCalendarDay(source.date, today);
+  let pendingLogs = normalizePendingLogs(source.pendingLogs);
+  if (!sameDay && !source.dayFinalized && typeof source.date === 'string') {
+    pendingLogs = mergePendingLog(
+      pendingLogs,
+      source.date,
+      logEntriesForDay(asArray(source.log), source.date)
+    );
+  }
   return {
     ...fallback,
     schemaVersion: 1,
     theme: source.theme === 'light' ? 'light' : 'dark',
-    language: source.language === 'cs' ? 'cs' : 'en',
+    language: source.language === 'en' ? 'en' : 'cs',
     airport: typeof source.airport === 'string' ? source.airport : 'LKKO',
     planes: asArray(source.planes),
     pilots: asArray(source.pilots),
-    dayPlanes: asArray(source.dayPlanes),
-    dayPilots: asArray(source.dayPilots),
-    presetInitialized: Boolean(source.presetInitialized),
-    recentConfigs: asArray(source.recentConfigs),
+    dayPlanes: sameDay ? asArray(source.dayPlanes) : [],
+    dayPilots: sameDay ? asArray(source.dayPilots) : [],
+    presetInitialized: sameDay && Boolean(source.presetInitialized),
+    recentConfigs: sameDay
+      ? recentConfigsForDay(asArray(source.recentConfigs), today)
+      : [],
     date: today,
-    log: sameDay ? asArray(source.log) : [],
+    log: sameDay ? logEntriesForDay(asArray(source.log), today) : [],
     airborne: sameDay ? asArray(source.airborne) : [],
-    takeoffs: sameDay && Number.isFinite(source.takeoffs) ? Number(source.takeoffs) : 0
+    takeoffs: sameDay && Number.isFinite(source.takeoffs) ? Number(source.takeoffs) : 0,
+    dayFinalized: sameDay && Boolean(source.dayFinalized),
+    pendingLogs
   };
 }
 
@@ -99,14 +202,16 @@ export function persistentSnapshot(state: AppState): PersistentState {
     airport: state.airport,
     planes: state.planes,
     pilots: state.pilots,
-    log: state.log,
+    log: logEntriesForDay(state.log, state.date),
     airborne: state.airborne,
     takeoffs: state.takeoffs,
     dayPlanes: state.dayPlanes,
     dayPilots: state.dayPilots,
     presetInitialized: state.presetInitialized,
-    recentConfigs: state.recentConfigs,
-    date: new Date().toDateString()
+    recentConfigs: recentConfigsForDay(state.recentConfigs, state.date),
+    date: state.date,
+    dayFinalized: state.dayFinalized,
+    pendingLogs: normalizePendingLogs(state.pendingLogs)
   };
 }
 
@@ -142,7 +247,7 @@ export class ConfigRepository {
       return {
         ...defaultConfig,
         ...parsed,
-        proxyUrl: parsed.proxyUrl ?? defaultConfig.proxyUrl
+        proxyUrl: KLUBKO_PROXY_URL
       };
     } catch {
       return { ...defaultConfig };
@@ -150,7 +255,10 @@ export class ConfigRepository {
   }
 
   save(config: KlubkoConfig): void {
-    this.storage.setItem(CONFIG_KEY, JSON.stringify(config));
+    this.storage.setItem(
+      CONFIG_KEY,
+      JSON.stringify({ ...config, proxyUrl: KLUBKO_PROXY_URL })
+    );
   }
 }
 

@@ -10,6 +10,8 @@ const messages = {
     proxy: 'PROXY',
     user: 'USER',
     pass: 'PASS',
+    showPassword: 'SHOW PASSWORD',
+    hidePassword: 'HIDE PASSWORD',
     production: 'PRODUCTION',
     test: 'TEST',
     language: 'LANGUAGE',
@@ -45,18 +47,19 @@ const messages = {
     lightMode: 'LIGHT MODE',
     darkMode: 'DARK MODE'
     ,airborne: 'AIRBORNE', noFlightsAirborne: 'NO FLIGHTS AIRBORNE', aerotow: 'AEROTOW', single: 'SINGLE',
-      inUse: 'IN USE',
+      inUse: 'IN USE', passengerOnly: 'PASSENGER ONLY',
     selectTowplane: 'TAP - SELECT TOWPLANE', selectGlider: 'TAP - SELECT GLIDER', selectAircraft: 'TAP - SELECT AIRCRAFT',
     towplaneOrMotorized: 'TOWPLANE OR MOTORIZED GLIDER', clear: 'CLR', pilot: 'PILOT', pilotNumber: 'PILOT ',
     selectAircraftTitle: 'SELECT AIRCRAFT', noMatchingPlanes: 'NO MATCHING PLANES IN PRESET', search: 'SEARCH', selectPilot: 'SELECT PILOT ',
     dragToSlot: 'DRAG ↑ TO SLOT · TAP TO ASSIGN', noMatchingPilots: 'NO MATCHING PILOTS IN PRESET', soloNoSecond: 'SOLO - NO SECOND PILOT',
     recentConfigs: 'RECENT CONFIGS', back: '← BACK', noRecent: 'NO RECENT CONFIGURATIONS', tapSlot: 'TAP A SLOT ABOVE TO BEGIN',
     swipeRecents: 'SWIPE FOR RECENT CONFIGS', buildHistory: 'LOG A FLIGHT TO BUILD HISTORY', landing: 'LANDING', cancelAction: 'CANCEL',
-    log: 'LOG', close: 'CLOSE', export: 'EXPORT', filterAll: 'ALL FLIGHTS', byAircraft: 'BY AIRCRAFT', byPilot: 'BY PILOT',
+    log: 'LOG', close: 'CLOSE', export: 'EXPORT', exportPdf: 'EXPORT PDF', exportPdfHint: 'DOWNLOAD PRINTABLE LOG', pushKlubkoHint: 'REVIEW AND SYNC FLIGHTS', returnAirborne: 'RETURN AIRBORNE', selectReturnFlight: 'SELECT A FLIGHT TO RETURN TO AIRBORNE', confirmReturnTitle: 'ARE YOU SURE?', confirmReturnBody: 'This will recall the logged landing time and return the flight to airborne.', deleteFlightTitle: 'DELETE FLIGHT?', deleteFlightBody: 'This permanently removes the selected flight from the local log.', deleteFlight: 'DELETE FLIGHT', alsoDeletePartner: 'ALSO DELETE AEROTOW PARTNER', filterAll: 'ALL FLIGHTS', byAircraft: 'BY AIRCRAFT', byPilot: 'BY PILOT',
     all: 'ALL', local: 'LOCAL', flightsHeader: 'FLIGHTS', acType: 'AC TYPE', reg: 'REG', pilot1: 'PILOT 1', pilot2: 'PILOT 2',
     takeoffShort: 'T/O', landingShort: 'LDG', dur: 'DUR', edit: 'EDIT', lock: 'LOCK', swipeEdit: 'SWIPE LEFT OR TAP EDIT',
     editActive: 'EDIT MODE ACTIVE · SWIPE RIGHT TO LOCK', savedLocally: 'LOG SAVED LOCALLY',
-    logTakeoff: 'LOG TAKEOFF', logLanding: 'LOG LANDING', set: 'SET', time: 'TIME'
+    logTakeoff: 'LOG TAKEOFF', logLanding: 'LOG LANDING', set: 'SET', time: 'TIME',
+    unappliedLogTitle: 'UNAPPLIED FLIGHT LOG', unappliedLogBody: 'A flight log from the previous day was not finally exported or pushed to KlubKo. It has been kept separately from today’s log.', unappliedLogDate: 'LOG DATE', unappliedLogFlights: 'FLIGHTS', remindLater: 'LATER'
   },
   cs: {
     login: 'PŘIHLÁSIT',
@@ -67,6 +70,8 @@ const messages = {
     proxy: 'PROXY',
     user: 'UŽIVATELSKÉ JMÉNO',
     pass: 'HESLO',
+    showPassword: 'ZOBRAZIT HESLO',
+    hidePassword: 'SKRÝT HESLO',
     production: 'PROVOZ',
     test: 'TEST',
     language: 'JAZYK',
@@ -102,18 +107,19 @@ const messages = {
     lightMode: 'SVĚTLÝ REŽIM',
     darkMode: 'TMAVÝ REŽIM'
     ,airborne: 'VE VZDUCHU', noFlightsAirborne: 'ŽÁDNÉ LETY VE VZDUCHU', aerotow: 'AEROVLEK', single: 'MOTOROVÉ',
-      inUse: 'POUŽITO',
+      inUse: 'POUŽITO', passengerOnly: 'POUZE CESTUJÍCÍ',
     selectTowplane: 'KLEPNĚTE - VYBERTE VLEČNOU', selectGlider: 'KLEPNĚTE - VYBERTE VĚTROŇ', selectAircraft: 'KLEPNĚTE - VYBERTE LETADLO',
     towplaneOrMotorized: 'VLEČNÁ NEBO MOTOROVÝ VĚTROŇ', clear: 'SMAZAT', pilot: 'PILOT', pilotNumber: 'PILOT ',
     selectAircraftTitle: 'VYBERTE LETADLO', noMatchingPlanes: 'ŽÁDNÁ ODPOVÍDAJÍCÍ LETADLA V PŘEDVOLBĚ', search: 'HLEDAT', selectPilot: 'VYBERTE PILOTA ',
     dragToSlot: 'PŘETÁHNĚTE DO POLE · KLEPNĚTE PRO PŘIŘAZENÍ', noMatchingPilots: 'ŽÁDNÍ ODPOVÍDAJÍCÍ PILOTI V PŘEDVOLBĚ', soloNoSecond: 'SÓLO - BEZ DRUHÉHO PILOTA',
     recentConfigs: 'NEDÁVNÉ SESTAVY', back: '← ZPĚT', noRecent: 'ŽÁDNÉ NEDÁVNÉ SESTAVY', tapSlot: 'KLEPNĚTE NA POLE VÝŠE',
     swipeRecents: 'PŘEJEĎTE PRO NEDÁVNÉ SESTAVY', buildHistory: 'ZAPIŠTE LET PRO VYTVOŘENÍ HISTORIE', landing: 'PŘISTÁNÍ', cancelAction: 'ZRUŠIT',
-    log: 'DENÍK', close: 'ZAVŘÍT', export: 'EXPORT', filterAll: 'VŠECHNY LETY', byAircraft: 'PODLE LETADLA', byPilot: 'PODLE PILOTA',
+    log: 'DENÍK', close: 'ZAVŘÍT', export: 'EXPORT', exportPdf: 'EXPORT PDF', exportPdfHint: 'STÁHNOUT DENÍK PRO TISK', pushKlubkoHint: 'ZKONTROLOVAT A ODESLAT LETY', returnAirborne: 'VRÁTIT DO VZDUCHU', selectReturnFlight: 'VYBERTE LET PRO VRÁCENÍ DO VZDUCHU', confirmReturnTitle: 'JSTE SI JISTI?', confirmReturnBody: 'Tímto zrušíte záznam času přistání a vrátíte let zpět do vzduchu.', deleteFlightTitle: 'SMAZAT LET?', deleteFlightBody: 'Tímto trvale odstraníte vybraný let z místního deníku.', deleteFlight: 'SMAZAT LET', alsoDeletePartner: 'SMAZAT TAKÉ PARTNERA AEROVLEKU', filterAll: 'VŠECHNY LETY', byAircraft: 'PODLE LETADLA', byPilot: 'PODLE PILOTA',
     all: 'VŠE', local: 'LOKÁLNÍ', flightsHeader: 'LETY', acType: 'TYP', reg: 'REG', pilot1: 'PILOT 1', pilot2: 'PILOT 2',
     takeoffShort: 'VZLET', landingShort: 'PŘIST', dur: 'ČAS', edit: 'UPRAVIT', lock: 'ZAMKNOUT', swipeEdit: 'PŘEJEĎTE VLEVO NEBO KLEPNĚTE NA UPRAVIT',
     editActive: 'REŽIM ÚPRAV · PŘEJEĎTE VPRAVO PRO ZAMKNUTÍ', savedLocally: 'DENÍK ULOŽEN LOKÁLNĚ',
-    logTakeoff: 'ZAPSAT VZLET', logLanding: 'ZAPSAT PŘISTÁNÍ', set: 'NASTAVIT', time: 'ČAS'
+    logTakeoff: 'ZAPSAT VZLET', logLanding: 'ZAPSAT PŘISTÁNÍ', set: 'NASTAVIT', time: 'ČAS',
+    unappliedLogTitle: 'NEODESLANÝ LETOVÝ DENÍK', unappliedLogBody: 'Letový deník z předchozího dne nebyl finálně exportován ani odeslán do KlubKa. Byl uchován odděleně od dnešního deníku.', unappliedLogDate: 'DATUM DENÍKU', unappliedLogFlights: 'LETY', remindLater: 'POZDĚJI'
   }
 } as const;
 
